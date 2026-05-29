@@ -26,7 +26,34 @@ document.addEventListener('DOMContentLoaded', () => {
             left: -Math.floor(Math.random() * (512 - 220)),
             top: -Math.floor(Math.random() * (512 - 220))
         },
-        soundEnabled: true
+        soundEnabled: true,
+        
+        // Snapchat State
+        snapNick: '',
+        snapCode: '',
+        snapActiveSubtab: 'snap-feed-subtab',
+        snapPhotos: [],
+        snapStreaks: [],
+        snapActiveUsers: [],
+        cameraStream: null,
+        capturedImageBase64: '',
+        currentPlayingStories: [],
+        currentStoryIndex: 0,
+        storyTimer: null,
+        calendarCurrentMonth: new Date().getMonth(),
+        calendarCurrentYear: new Date().getFullYear(),
+        
+        // Trivia State
+        triviaPlayerName: '',
+        triviaCurrentIndex: 0,
+        triviaCurrentScore: 0,
+        triviaCorrectAnswers: 0,
+        triviaSecondsRemaining: 15,
+        triviaTimerInterval: null,
+        triviaQuestions: [],
+        triviaCustomQuestions: [],
+        triviaHighscore: 0,
+        triviaGamesPlayed: 0
     };
 
     // --- SUPABASE CLIENT INITIALIZATION ---
@@ -149,11 +176,17 @@ document.addEventListener('DOMContentLoaded', () => {
         initMusicPlayer();
         initParticleSystem();
 
+        // Initialise Snapchat & Trivia engines
+        initSnapChat();
+        initTrivia();
+
         // Start Sync / Polling Loops (CORS discord & Supabase)
         setInterval(fetchChatMessages, 4000);   // Chat polls every 4s
         setInterval(fetchPixelBoard, 5000);     // Pixel Canvas polls every 5s
         setInterval(fetchGamingEvents, 8000);   // Events poll every 8s
         setInterval(fetchRealDiscordWidget, 15000); // Discord widget polls every 15s
+        setInterval(syncSnapData, 6000);        // Snapchat syncs every 6s
+        setInterval(syncTriviaLeaderboard, 10000); // Trivia scoreboard syncs every 10s
     }
 
     // --- DIGITAL CLOCK ---
@@ -1258,6 +1291,1356 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     }
+
+    // ==========================================
+    // SNAPCHAT THC ENGINE
+    // ==========================================
+    function initSnapChat() {
+        const loginContainer = document.getElementById('snap-login-container');
+        const mainContainer = document.getElementById('snap-main-container');
+        const nickInput = document.getElementById('snap-nick-input');
+        const codeInput = document.getElementById('snap-code-input');
+        const btnLogin = document.getElementById('btn-snap-login');
+        const btnLogout = document.getElementById('btn-snap-logout');
+        
+        // Subtab switching
+        const subtabButtons = document.querySelectorAll('.snap-tab-btn');
+        const subtabViews = document.querySelectorAll('.snap-subtab-view');
+        
+        // Camera selectors
+        const btnToggleCam = document.getElementById('btn-toggle-camera');
+        const btnCapture = document.getElementById('btn-capture-snap');
+        const btnRetake = document.getElementById('btn-retake-snap');
+        const fileInput = document.getElementById('snap-file-input');
+        const btnSend = document.getElementById('btn-send-snap');
+        
+        // Story viewer selectors
+        const storyModal = document.getElementById('modal-story-viewer');
+        const btnCloseStory = document.getElementById('btn-close-story');
+        
+        // Calendar selectors
+        const btnPrevMonth = document.getElementById('btn-prev-month');
+        const btnNextMonth = document.getElementById('btn-next-month');
+
+        // Check for existing session
+        const savedNick = localStorage.getItem('thc_snap_nick');
+        const savedCode = localStorage.getItem('thc_snap_code');
+        
+        if (savedNick && savedCode) {
+            state.snapNick = savedNick;
+            state.snapCode = savedCode;
+            
+            loginContainer.classList.add('hidden');
+            mainContainer.classList.remove('hidden');
+            
+            document.getElementById('snap-user-display').textContent = state.snapNick;
+            document.getElementById('snap-room-display').textContent = state.snapCode;
+            
+            syncSnapData();
+        }
+
+        // Login handler
+        if (btnLogin) {
+            btnLogin.addEventListener('click', () => {
+                const nick = nickInput.value.trim();
+                const code = codeInput.value.trim().toUpperCase();
+                
+                if (!nick || !code) {
+                    alert('Por favor, introduce un apodo y código de sala.');
+                    return;
+                }
+                
+                state.snapNick = nick;
+                state.snapCode = code;
+                
+                localStorage.setItem('thc_snap_nick', nick);
+                localStorage.setItem('thc_snap_code', code);
+                
+                loginContainer.classList.add('hidden');
+                mainContainer.classList.remove('hidden');
+                
+                document.getElementById('snap-user-display').textContent = nick;
+                document.getElementById('snap-room-display').textContent = code;
+                
+                playChimeSound();
+                syncSnapData();
+            });
+        }
+
+        // Logout handler
+        if (btnLogout) {
+            btnLogout.addEventListener('click', () => {
+                stopCamera();
+                state.snapNick = '';
+                state.snapCode = '';
+                localStorage.removeItem('thc_snap_nick');
+                localStorage.removeItem('thc_snap_code');
+                
+                loginContainer.classList.remove('hidden');
+                mainContainer.classList.add('hidden');
+                
+                playPopSound();
+            });
+        }
+
+        // Subtab toggle
+        subtabButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                subtabButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                const target = btn.getAttribute('data-snap-subtab');
+                subtabViews.forEach(view => {
+                    const isTarget = view.id === target;
+                    view.classList.toggle('hidden', !isTarget);
+                });
+                
+                state.snapActiveSubtab = target;
+                playHoverSound();
+                
+                // If exiting camera subtab, stop streaming
+                if (target !== 'snap-camera-subtab') {
+                    stopCamera();
+                } else {
+                    // Reset fields
+                    document.getElementById('snap-caption-input').value = '';
+                }
+
+                if (target === 'snap-archive-subtab') {
+                    renderCalendar();
+                }
+            });
+        });
+
+        // Camera handlers
+        if (btnToggleCam) {
+            btnToggleCam.addEventListener('click', () => {
+                if (state.cameraStream) {
+                    stopCamera();
+                } else {
+                    startCamera();
+                }
+                playPopSound();
+            });
+        }
+
+        if (btnCapture) {
+            btnCapture.addEventListener('click', () => {
+                captureSnap();
+                playPopSound();
+            });
+        }
+
+        if (btnRetake) {
+            btnRetake.addEventListener('click', () => {
+                document.getElementById('captured-preview').classList.add('hidden');
+                document.getElementById('camera-video').classList.remove('hidden');
+                btnCapture.classList.remove('hidden');
+                btnRetake.classList.add('hidden');
+                btnSend.disabled = true;
+                state.capturedImageBase64 = '';
+                startCamera();
+                playPopSound();
+            });
+        }
+
+        if (fileInput) {
+            fileInput.addEventListener('change', handleFileInput);
+        }
+
+        if (btnSend) {
+            btnSend.addEventListener('click', () => {
+                sendSnap();
+            });
+        }
+
+        // Close Story
+        if (btnCloseStory) {
+            btnCloseStory.addEventListener('click', () => {
+                storyModal.classList.add('hidden');
+                if (state.storyTimer) clearInterval(state.storyTimer);
+                state.storyTimer = null;
+                playPopSound();
+            });
+        }
+
+        // Calendar Month switches
+        if (btnPrevMonth) {
+            btnPrevMonth.addEventListener('click', () => {
+                state.calendarCurrentMonth--;
+                if (state.calendarCurrentMonth < 0) {
+                    state.calendarCurrentMonth = 11;
+                    state.calendarCurrentYear--;
+                }
+                renderCalendar();
+                playHoverSound();
+            });
+        }
+
+        if (btnNextMonth) {
+            btnNextMonth.addEventListener('click', () => {
+                state.calendarCurrentMonth++;
+                if (state.calendarCurrentMonth > 11) {
+                    state.calendarCurrentMonth = 0;
+                    state.calendarCurrentYear++;
+                }
+                renderCalendar();
+                playHoverSound();
+            });
+        }
+    }
+
+    // Camera capture methods
+    async function startCamera() {
+        try {
+            state.cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+            const video = document.getElementById('camera-video');
+            video.srcObject = state.cameraStream;
+            video.classList.remove('hidden');
+            document.getElementById('captured-preview').classList.add('hidden');
+            document.getElementById('btn-capture-snap').classList.remove('hidden');
+            document.getElementById('btn-retake-snap').classList.add('hidden');
+            document.getElementById('camera-status-text').textContent = 'Cámara Activa';
+            document.getElementById('btn-toggle-camera').innerHTML = '<i class="fa-solid fa-power-off"></i> Apagar Cámara';
+        } catch (err) {
+            console.error('Camera access denied:', err);
+            alert('No se pudo acceder a la cámara. Prueba a subir una imagen local.');
+            stopCamera();
+        }
+    }
+
+    function stopCamera() {
+        if (state.cameraStream) {
+            state.cameraStream.getTracks().forEach(track => track.stop());
+            state.cameraStream = null;
+        }
+        const video = document.getElementById('camera-video');
+        if (video) video.srcObject = null;
+        const btnCapture = document.getElementById('btn-capture-snap');
+        if (btnCapture) btnCapture.classList.add('hidden');
+        const statusText = document.getElementById('camera-status-text');
+        if (statusText) statusText.textContent = 'Cámara apagada';
+        const btnToggleCam = document.getElementById('btn-toggle-camera');
+        if (btnToggleCam) btnToggleCam.innerHTML = '<i class="fa-solid fa-power-off"></i> Encender Cámara';
+    }
+
+    function captureSnap() {
+        const video = document.getElementById('camera-video');
+        const canvas = document.getElementById('camera-canvas');
+        const preview = document.getElementById('captured-preview');
+        const btnCapture = document.getElementById('btn-capture-snap');
+        const btnRetake = document.getElementById('btn-retake-snap');
+        const btnSend = document.getElementById('btn-send-snap');
+        
+        if (!video || !canvas || !preview) return;
+        
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        const ctxCanvas = canvas.getContext('2d');
+        ctxCanvas.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        state.capturedImageBase64 = dataUrl;
+        
+        preview.src = dataUrl;
+        preview.classList.remove('hidden');
+        video.classList.add('hidden');
+        
+        btnCapture.classList.add('hidden');
+        btnRetake.classList.remove('hidden');
+        btnSend.removeAttribute('disabled');
+        
+        stopCamera();
+    }
+
+    function handleFileInput(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+            state.capturedImageBase64 = evt.target.result;
+            const preview = document.getElementById('captured-preview');
+            preview.src = evt.target.result;
+            preview.classList.remove('hidden');
+            document.getElementById('camera-video').classList.add('hidden');
+            document.getElementById('btn-send-snap').removeAttribute('disabled');
+            document.getElementById('camera-status-text').textContent = 'Imagen cargada';
+            
+            stopCamera();
+            playPopSound();
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async function sendSnap() {
+        if (!state.capturedImageBase64) return;
+        
+        const caption = document.getElementById('snap-caption-input').value.trim();
+        const recipient = document.getElementById('snap-recipient-select').value;
+        const sendBtn = document.getElementById('btn-send-snap');
+        
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando...';
+        
+        const newSnap = {
+            username: state.snapNick,
+            room_code: state.snapCode,
+            image_data: state.capturedImageBase64,
+            caption: caption,
+            recipient: recipient,
+            likes_count: 0,
+            likes_by: []
+        };
+        
+        if (state.isSupabaseReal) {
+            try {
+                const { error } = await supabase
+                    .from('thc_snap_photos')
+                    .insert([newSnap]);
+                if (error) throw error;
+                
+                await updateStreakRecord(recipient);
+                playChimeSound();
+            } catch (err) {
+                console.error('Failed to upload snap:', err);
+                alert('Error al enviar el Snap.');
+            }
+        } else {
+            // Local fallback
+            const snaps = JSON.parse(localStorage.getItem('thc_snap_photos_local') || '[]');
+            const id = Date.now();
+            const created_at = new Date().toISOString();
+            const snapWithMeta = { id, created_at, ...newSnap };
+            snaps.push(snapWithMeta);
+            localStorage.setItem('thc_snap_photos_local', JSON.stringify(snaps));
+            
+            updateStreakRecordLocal(recipient);
+            playChimeSound();
+        }
+        
+        // Reset inputs & preview
+        document.getElementById('snap-caption-input').value = '';
+        document.getElementById('captured-preview').classList.add('hidden');
+        document.getElementById('camera-video').classList.remove('hidden');
+        document.getElementById('btn-send-snap').disabled = true;
+        document.getElementById('btn-send-snap').innerHTML = '<i class="fa-solid fa-paper-plane"></i> Enviar Snap 🔥';
+        state.capturedImageBase64 = '';
+        
+        // Switch subtab back
+        const feedBtn = document.querySelector('.snap-tab-btn[data-snap-subtab="snap-feed-subtab"]');
+        if (feedBtn) feedBtn.click();
+        
+        await syncSnapData();
+    }
+
+    async function updateStreakRecord(recipient) {
+        if (!state.isSupabaseReal) return;
+        const todayStr = new Date().toISOString().substring(0, 10);
+        const userA = state.snapNick;
+        const userB = recipient; // 'group' or specific username
+        
+        try {
+            // Update User A -> User B streak
+            const { data, error } = await supabase
+                .from('thc_snap_streaks')
+                .select('*')
+                .eq('room_code', state.snapCode)
+                .eq('user_a', userA)
+                .eq('user_b', userB)
+                .maybeSingle();
+                
+            if (error) throw error;
+            
+            if (data) {
+                const lastDate = new Date(data.last_posted);
+                const today = new Date(todayStr);
+                const diffTime = today - lastDate;
+                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                
+                let newCount = data.streak_count;
+                if (diffDays === 1) {
+                    newCount += 1;
+                } else if (diffDays > 1) {
+                    newCount = 1;
+                }
+                
+                await supabase
+                    .from('thc_snap_streaks')
+                    .update({ streak_count: newCount, last_posted: todayStr })
+                    .eq('id', data.id);
+            } else {
+                await supabase
+                    .from('thc_snap_streaks')
+                    .insert([{
+                        room_code: state.snapCode,
+                        user_a: userA,
+                        user_b: userB,
+                        streak_count: 1,
+                        last_posted: todayStr
+                    }]);
+            }
+            
+            // If individual, update User B -> User A streak as well for sync
+            if (userB !== 'group') {
+                const { data: data2, error: error2 } = await supabase
+                    .from('thc_snap_streaks')
+                    .select('*')
+                    .eq('room_code', state.snapCode)
+                    .eq('user_a', userB)
+                    .eq('user_b', userA)
+                    .maybeSingle();
+                    
+                if (!error2) {
+                    if (data2) {
+                        const lastDate = new Date(data2.last_posted);
+                        const today = new Date(todayStr);
+                        const diffDays = Math.floor((today - lastDate) / (1000 * 60 * 60 * 24));
+                        let newCount = data2.streak_count;
+                        if (diffDays === 1) newCount += 1;
+                        else if (diffDays > 1) newCount = 1;
+                        
+                        await supabase
+                            .from('thc_snap_streaks')
+                            .update({ streak_count: newCount, last_posted: todayStr })
+                            .eq('id', data2.id);
+                    } else {
+                        await supabase
+                            .from('thc_snap_streaks')
+                            .insert([{
+                                room_code: state.snapCode,
+                                user_a: userB,
+                                user_b: userA,
+                                streak_count: 1,
+                                last_posted: todayStr
+                            }]);
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Streak DB update error:', err);
+        }
+    }
+
+    function updateStreakRecordLocal(recipient) {
+        const streaks = JSON.parse(localStorage.getItem('thc_snap_streaks_local') || '[]');
+        const userA = state.snapNick;
+        const userB = recipient;
+        const todayStr = new Date().toISOString().substring(0, 10);
+        
+        const updateSingle = (a, b) => {
+            let found = streaks.find(s => s.room_code === state.snapCode && s.user_a === a && s.user_b === b);
+            if (found) {
+                const diffDays = Math.floor((new Date(todayStr) - new Date(found.last_posted)) / (1000 * 60 * 60 * 24));
+                if (diffDays === 1) found.streak_count += 1;
+                else if (diffDays > 1) found.streak_count = 1;
+                found.last_posted = todayStr;
+            } else {
+                streaks.push({
+                    room_code: state.snapCode,
+                    user_a: a,
+                    user_b: b,
+                    streak_count: 1,
+                    last_posted: todayStr
+                });
+            }
+        };
+        
+        updateSingle(userA, userB);
+        if (userB !== 'group') {
+            updateSingle(userB, userA);
+        }
+        localStorage.setItem('thc_snap_streaks_local', JSON.stringify(streaks));
+    }
+
+    // Sync data (fetches, renders)
+    async function syncSnapData() {
+        if (!state.snapCode) return;
+        
+        if (state.isSupabaseReal) {
+            try {
+                // Fetch snaps
+                const { data: photos, error: pError } = await supabase
+                    .from('thc_snap_photos')
+                    .select('*')
+                    .eq('room_code', state.snapCode)
+                    .order('created_at', { ascending: false });
+                    
+                if (pError) throw pError;
+                state.snapPhotos = photos || [];
+                
+                // Fetch streaks
+                const { data: streaks, error: sError } = await supabase
+                    .from('thc_snap_streaks')
+                    .select('*')
+                    .eq('room_code', state.snapCode);
+                    
+                if (sError) throw sError;
+                state.snapStreaks = streaks || [];
+            } catch (err) {
+                console.error('Error fetching snaps/streaks:', err);
+            }
+        } else {
+            // Local fallback
+            state.snapPhotos = JSON.parse(localStorage.getItem('thc_snap_photos_local') || '[]');
+            state.snapPhotos = state.snapPhotos.filter(p => p.room_code === state.snapCode);
+            state.snapStreaks = JSON.parse(localStorage.getItem('thc_snap_streaks_local') || '[]');
+            state.snapStreaks = state.snapStreaks.filter(s => s.room_code === state.snapCode);
+        }
+        
+        // Determine active users who have posted in this room
+        const usersInRoom = new Set();
+        state.snapPhotos.forEach(p => usersInRoom.add(p.username));
+        usersInRoom.delete(state.snapNick); // exclude self
+        state.snapActiveUsers = Array.from(usersInRoom);
+        
+        renderSnapSidebar();
+        renderSnapFeed();
+        renderRecipientDropdown();
+        
+        if (state.snapActiveSubtab === 'snap-archive-subtab') {
+            renderCalendar();
+        }
+    }
+
+    function renderSnapSidebar() {
+        const groupDisplay = document.getElementById('group-streak-display');
+        const streaksList = document.getElementById('snap-streaks-list');
+        if (!streaksList) return;
+        
+        // Render Group Streak
+        const groupRecord = state.snapStreaks.find(s => s.user_a === state.snapNick && s.user_b === 'group');
+        const gStreak = groupRecord ? groupRecord.streak_count : 0;
+        groupDisplay.textContent = `🔥 ${gStreak}`;
+        
+        // Render Individual Streaks
+        streaksList.innerHTML = '';
+        if (state.snapActiveUsers.length === 0) {
+            streaksList.innerHTML = `<li style="font-size: 0.72rem; color: var(--text-muted); text-align: center; padding: 0.5rem 0;">No hay otros miembros activos aún.</li>`;
+            return;
+        }
+        
+        state.snapActiveUsers.forEach(u => {
+            const streakRecord = state.snapStreaks.find(s => s.user_a === state.snapNick && s.user_b === u);
+            const count = streakRecord ? streakRecord.streak_count : 0;
+            
+            const card = document.createElement('li');
+            card.className = 'user-streak-card';
+            card.innerHTML = `
+                <div class="streak-user-info">
+                    <div class="streak-avatar">${u.substring(0, 2).toUpperCase()}</div>
+                    <span class="streak-username">${u}</span>
+                </div>
+                <span class="streak-counter-pill">🔥 ${count}</span>
+            `;
+            
+            streaksList.appendChild(card);
+        });
+    }
+
+    function renderRecipientDropdown() {
+        const select = document.getElementById('snap-recipient-select');
+        if (!select) return;
+        
+        // Keep "Todos" as option 1
+        select.innerHTML = '<option value="group">Todos (Muro del Grupo)</option>';
+        
+        state.snapActiveUsers.forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u;
+            opt.textContent = `${u} (Privado)`;
+            select.appendChild(opt);
+        });
+    }
+
+    function renderSnapFeed() {
+        const circlesContainer = document.getElementById('stories-circles-container');
+        const timeline = document.getElementById('snap-feed-timeline');
+        
+        if (!circlesContainer || !timeline) return;
+        
+        circlesContainer.innerHTML = '';
+        timeline.innerHTML = '';
+        
+        const now = new Date();
+        const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        
+        // Filters active snaps (last 24 hours)
+        const activeSnaps = state.snapPhotos.filter(p => new Date(p.created_at) >= oneDayAgo);
+        
+        // Group stories by username
+        const storiesByUser = {};
+        activeSnaps.forEach(p => {
+            // Snaps are visible if sent to 'group' or if sent to us, or if we sent them to someone
+            const isVisible = p.recipient === 'group' || p.recipient === state.snapNick || p.username === state.snapNick;
+            if (isVisible) {
+                if (!storiesByUser[p.username]) storiesByUser[p.username] = [];
+                storiesByUser[p.username].push(p);
+            }
+        });
+        
+        // Render stories bubbles
+        const activeStoryUsers = Object.keys(storiesByUser);
+        if (activeStoryUsers.length === 0) {
+            circlesContainer.innerHTML = `<span style="font-size: 0.72rem; color: var(--text-muted); padding: 0.5rem 0.2rem;">No hay historias activas en las últimas 24h.</span>`;
+        } else {
+            activeStoryUsers.forEach(u => {
+                const wrap = document.createElement('div');
+                wrap.className = 'story-circle-wrapper';
+                wrap.innerHTML = `
+                    <div class="story-bubble">
+                        <div class="story-bubble-inner">${u.substring(0, 2).toUpperCase()}</div>
+                    </div>
+                    <span class="story-circle-label">${u === state.snapNick ? 'Tú' : u}</span>
+                `;
+                
+                wrap.addEventListener('click', () => {
+                    watchStory(u, storiesByUser[u]);
+                });
+                circlesContainer.appendChild(wrap);
+            });
+        }
+        
+        // Render public timeline snaps (All time snaps, but showing most recent first)
+        // Snaps show on public timeline ONLY if they were sent to 'group'
+        const publicSnaps = state.snapPhotos.filter(p => p.recipient === 'group');
+        
+        if (publicSnaps.length === 0) {
+            timeline.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 2rem 0;">No hay fotos compartidas en el muro grupal. ¡Captura y sube la primera!</div>`;
+            return;
+        }
+        
+        publicSnaps.forEach(p => {
+            const card = document.createElement('div');
+            card.className = 'feed-snap-card glass-panel';
+            
+            const elapsed = getElapsedString(p.created_at);
+            const isLiked = p.likes_by.includes(state.snapNick);
+            
+            card.innerHTML = `
+                <div class="snap-card-header">
+                    <div class="snap-card-author-info">
+                        <div class="snap-card-avatar">${p.username.substring(0,2).toUpperCase()}</div>
+                        <span class="snap-card-username">${p.username}</span>
+                    </div>
+                    <span class="snap-card-time">${elapsed}</span>
+                </div>
+                <div class="snap-card-body">
+                    <img src="${p.image_data}" alt="Snap">
+                    ${p.caption ? `<div class="snap-card-caption-bar">${escapeHtml(p.caption)}</div>` : ''}
+                </div>
+                <div class="snap-card-footer">
+                    <div class="snap-card-actions">
+                        <button class="snap-like-btn ${isLiked ? 'liked' : ''}" data-id="${p.id}">
+                            <i class="fa-solid fa-heart"></i> <span>${p.likes_count}</span>
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            card.querySelector('.snap-like-btn').addEventListener('click', (e) => {
+                likeSnapCard(p, e.currentTarget);
+            });
+            
+            timeline.appendChild(card);
+        });
+    }
+
+    async function likeSnapCard(snap, buttonEl) {
+        const isLiked = snap.likes_by.includes(state.snapNick);
+        if (isLiked) return; // Snapchat allows liking once
+        
+        snap.likes_by.push(state.snapNick);
+        snap.likes_count += 1;
+        playPopSound();
+        
+        // Update UI button
+        buttonEl.classList.add('liked');
+        buttonEl.querySelector('span').textContent = snap.likes_count;
+        
+        // Save
+        if (state.isSupabaseReal) {
+            try {
+                await supabase
+                    .from('thc_snap_photos')
+                    .update({ likes_count: snap.likes_count, likes_by: snap.likes_by })
+                    .eq('id', snap.id);
+            } catch (e) {
+                console.error('Failed to sync like count:', e);
+            }
+        } else {
+            const local = JSON.parse(localStorage.getItem('thc_snap_photos_local') || '[]');
+            const idx = local.findIndex(x => x.id === snap.id);
+            if (idx !== -1) {
+                local[idx].likes_count = snap.likes_count;
+                local[idx].likes_by = snap.likes_by;
+                localStorage.setItem('thc_snap_photos_local', JSON.stringify(local));
+            }
+        }
+    }
+
+    function watchStory(username, snaps) {
+        state.currentPlayingStories = snaps;
+        state.currentStoryIndex = 0;
+        
+        const modal = document.getElementById('modal-story-viewer');
+        modal.classList.remove('hidden');
+        
+        playNextStory();
+    }
+
+    function playNextStory() {
+        if (state.currentStoryIndex >= state.currentPlayingStories.length) {
+            document.getElementById('modal-story-viewer').classList.add('hidden');
+            if (state.storyTimer) clearInterval(state.storyTimer);
+            state.storyTimer = null;
+            return;
+        }
+        
+        const snap = state.currentPlayingStories[state.currentStoryIndex];
+        const elapsed = getElapsedString(snap.created_at);
+        
+        document.getElementById('story-username-display').textContent = snap.username;
+        document.getElementById('story-avatar-display').textContent = snap.username.substring(0, 2).toUpperCase();
+        document.getElementById('story-time-display').textContent = elapsed;
+        document.getElementById('story-image-display').src = snap.image_data;
+        
+        const capOverlay = document.getElementById('story-caption-display');
+        if (snap.caption) {
+            capOverlay.textContent = snap.caption;
+            capOverlay.classList.remove('hidden');
+        } else {
+            capOverlay.classList.add('hidden');
+        }
+        
+        document.getElementById('story-likes-count').textContent = snap.likes_count;
+        
+        const heartBtn = document.getElementById('btn-like-story');
+        heartBtn.classList.toggle('liked', snap.likes_by.includes(state.snapNick));
+        
+        // Re-bind like handler
+        const newHeart = heartBtn.cloneNode(true);
+        heartBtn.parentNode.replaceChild(newHeart, heartBtn);
+        newHeart.addEventListener('click', async () => {
+            if (!snap.likes_by.includes(state.snapNick)) {
+                snap.likes_by.push(state.snapNick);
+                snap.likes_count += 1;
+                playPopSound();
+                document.getElementById('story-likes-count').textContent = snap.likes_count;
+                newHeart.classList.add('liked');
+                
+                if (state.isSupabaseReal) {
+                    await supabase
+                        .from('thc_snap_photos')
+                        .update({ likes_count: snap.likes_count, likes_by: snap.likes_by })
+                        .eq('id', snap.id);
+                } else {
+                    const local = JSON.parse(localStorage.getItem('thc_snap_photos_local') || '[]');
+                    const idx = local.findIndex(x => x.id === snap.id);
+                    if (idx !== -1) {
+                        local[idx].likes_count = snap.likes_count;
+                        local[idx].likes_by = snap.likes_by;
+                        localStorage.setItem('thc_snap_photos_local', JSON.stringify(local));
+                    }
+                }
+                syncSnapData();
+            }
+        });
+        
+        // Story 5s progress bar countdown
+        if (state.storyTimer) clearInterval(state.storyTimer);
+        let progress = 0;
+        const fillBar = document.getElementById('story-progress-fill');
+        fillBar.style.width = '0%';
+        
+        state.storyTimer = setInterval(() => {
+            progress += 2;
+            fillBar.style.width = `${progress}%`;
+            
+            if (progress >= 100) {
+                clearInterval(state.storyTimer);
+                state.currentStoryIndex++;
+                playNextStory();
+            }
+        }, 100);
+    }
+
+    function renderCalendar() {
+        const month = state.calendarCurrentMonth;
+        const year = state.calendarCurrentYear;
+        
+        const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+        const monthYearDisplay = document.getElementById('calendar-month-year');
+        if (monthYearDisplay) monthYearDisplay.textContent = `${monthNames[month]} ${year}`;
+        
+        const grid = document.getElementById('calendar-days-grid');
+        if (!grid) return;
+        grid.innerHTML = '';
+        
+        let firstDay = new Date(year, month, 1).getDay();
+        firstDay = firstDay === 0 ? 6 : firstDay - 1; // Mon=0, Sun=6
+        
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        
+        // Empty cells before first day
+        for (let i = 0; i < firstDay; i++) {
+            const empty = document.createElement('div');
+            empty.className = 'calendar-day empty-day';
+            grid.appendChild(empty);
+        }
+        
+        // Group photos by day of month
+        const snapsByDay = {};
+        state.snapPhotos.forEach(p => {
+            const date = new Date(p.created_at);
+            if (date.getMonth() === month && date.getFullYear() === year) {
+                const day = date.getDate();
+                if (!snapsByDay[day]) snapsByDay[day] = [];
+                snapsByDay[day].push(p);
+            }
+        });
+        
+        // Render days
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dayCell = document.createElement('div');
+            dayCell.className = 'calendar-day active-day';
+            
+            const numLabel = document.createElement('span');
+            numLabel.className = 'calendar-day-num';
+            numLabel.textContent = day;
+            dayCell.appendChild(numLabel);
+            
+            const daySnaps = snapsByDay[day] || [];
+            if (daySnaps.length > 0) {
+                // Get snap with highest likes on that day
+                daySnaps.sort((a, b) => b.likes_count - a.likes_count || new Date(b.created_at) - new Date(a.created_at));
+                const topSnap = daySnaps[0];
+                
+                dayCell.classList.add('has-photo');
+                
+                const img = document.createElement('img');
+                img.className = 'calendar-day-thumb';
+                img.src = topSnap.image_data;
+                dayCell.appendChild(img);
+                
+                const likesPill = document.createElement('span');
+                likesPill.className = 'calendar-day-likes';
+                likesPill.innerHTML = `<i class="fa-solid fa-heart"></i> ${topSnap.likes_count}`;
+                dayCell.appendChild(likesPill);
+                
+                dayCell.addEventListener('click', () => {
+                    showCalendarPhotoDetail(topSnap);
+                });
+            }
+            grid.appendChild(dayCell);
+        }
+    }
+
+    function showCalendarPhotoDetail(snap) {
+        if (state.storyTimer) clearInterval(state.storyTimer);
+        state.storyTimer = null;
+        
+        const modal = document.getElementById('modal-story-viewer');
+        modal.classList.remove('hidden');
+        
+        document.getElementById('story-progress-fill').style.width = '100%';
+        document.getElementById('story-username-display').textContent = snap.username;
+        document.getElementById('story-avatar-display').textContent = snap.username.substring(0, 2).toUpperCase();
+        document.getElementById('story-time-display').textContent = new Date(snap.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+        document.getElementById('story-image-display').src = snap.image_data;
+        
+        const caption = document.getElementById('story-caption-display');
+        if (snap.caption) {
+            caption.textContent = snap.caption;
+            caption.classList.remove('hidden');
+        } else {
+            caption.classList.add('hidden');
+        }
+        
+        document.getElementById('story-likes-count').textContent = snap.likes_count;
+        
+        const heartBtn = document.getElementById('btn-like-story');
+        heartBtn.classList.toggle('liked', snap.likes_by.includes(state.snapNick));
+        
+        const newHeart = heartBtn.cloneNode(true);
+        heartBtn.parentNode.replaceChild(newHeart, heartBtn);
+        newHeart.addEventListener('click', async () => {
+            if (!snap.likes_by.includes(state.snapNick)) {
+                snap.likes_by.push(state.snapNick);
+                snap.likes_count += 1;
+                playPopSound();
+                document.getElementById('story-likes-count').textContent = snap.likes_count;
+                newHeart.classList.add('liked');
+                
+                if (state.isSupabaseReal) {
+                    await supabase
+                        .from('thc_snap_photos')
+                        .update({ likes_count: snap.likes_count, likes_by: snap.likes_by })
+                        .eq('id', snap.id);
+                } else {
+                    const local = JSON.parse(localStorage.getItem('thc_snap_photos_local') || '[]');
+                    const idx = local.findIndex(x => x.id === snap.id);
+                    if (idx !== -1) {
+                        local[idx].likes_count = snap.likes_count;
+                        local[idx].likes_by = snap.likes_by;
+                        localStorage.setItem('thc_snap_photos_local', JSON.stringify(local));
+                    }
+                }
+                renderCalendar();
+            }
+        });
+    }
+
+    function getElapsedString(createdAt) {
+        const diffMs = new Date() - new Date(createdAt);
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHrs = Math.floor(diffMins / 6000);
+        
+        if (diffMins < 1) return 'Ahora mismo';
+        if (diffMins < 60) return `Hace ${diffMins} min`;
+        if (diffHrs < 24) return `Hace ${diffHrs} h`;
+        return new Date(createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+    }
+
+    // ==========================================
+    // TRIVIA THC ENGINE
+    // ==========================================
+    const presetTriviaQuestions = [
+        { question: "¿Cómo se llama el fontanero de Nintendo?", options: ["Mario", "Luigi", "Wario", "Yoshi"], correct_index: 0, category: "videojuegos", creator: "Sistema" },
+        { question: "¿Qué lenguaje se usa principalmente para dar estilo a páginas web?", options: ["HTML", "Python", "CSS", "C++"], correct_index: 2, category: "tecnologia", creator: "Sistema" },
+        { question: "¿Qué juego popular presenta bloques y creepers?", options: ["Roblox", "Minecraft", "Terraria", "Fortnite"], correct_index: 1, category: "videojuegos", creator: "Sistema" },
+        { question: "¿Cuál es el puerto por defecto de HTTP?", options: ["443", "22", "80", "8080"], correct_index: 2, category: "tecnologia", creator: "Sistema" },
+        { question: "¿En qué año se estrenó la película original de Star Wars (Episodio IV)?", options: ["1975", "1977", "1980", "1983"], correct_index: 1, category: "cultura", creator: "Sistema" },
+        { question: "¿Cuál de estos NO es un lenguaje de programación?", options: ["TypeScript", "Rust", "Markdown", "Go"], correct_index: 2, category: "tecnologia", creator: "Sistema" },
+        { question: "¿Cómo se llama el protagonista de la saga Half-Life?", options: ["Gordon Freeman", "John 117", "G-Man", "Barney Calhoun"], correct_index: 0, category: "videojuegos", creator: "Sistema" },
+        { question: "¿Qué compañía desarrolló la consola PlayStation?", options: ["Microsoft", "Sony", "Nintendo", "Sega"], correct_index: 1, category: "videojuegos", creator: "Sistema" },
+        { question: "¿Qué protocolo cifra las páginas web?", options: ["HTTP", "FTP", "HTTPS", "SMTP"], correct_index: 2, category: "tecnologia", creator: "Sistema" },
+        { question: "¿Cómo se llama el actor que interpreta a Iron Man en Marvel?", options: ["Chris Evans", "Robert Downey Jr.", "Chris Hemsworth", "Tom Holland"], correct_index: 1, category: "cultura", creator: "Sistema" },
+        { question: "¿Qué estudio desarrolló CD Projekt Red, creador de Cyberpunk 2077?", options: ["CD Projekt Red", "Bethesda", "Ubisoft", "Rockstar Games"], correct_index: 0, category: "videojuegos", creator: "Sistema" },
+        { question: "¿Qué etiqueta HTML se usa para enlaces hipertexto?", options: ["<link>", "<a>", "<href>", "<route>"], correct_index: 1, category: "tecnologia", creator: "Sistema" },
+        { question: "¿Quién escribió la famosa obra literaria Don Quijote?", options: ["Federico García Lorca", "Miguel de Cervantes", "Lope de Vega", "Francisco de Quevedo"], correct_index: 1, category: "cultura", creator: "Sistema" },
+        { question: "¿Cuál es el Pokémon inicial de tipo fuego en la primera generación?", options: ["Bulbasaur", "Squirtle", "Charmander", "Pikachu"], correct_index: 2, category: "videojuegos", creator: "Sistema" },
+        { question: "¿Qué framework de Javascript fue creado por Facebook?", options: ["Angular", "Vue", "Svelte", "React"], correct_index: 3, category: "tecnologia", creator: "Sistema" }
+    ];
+
+    function initTrivia() {
+        const btnStart = document.getElementById('btn-start-trivia');
+        const btnToggleCreator = document.getElementById('btn-toggle-question-creator');
+        const btnCloseCreator = document.getElementById('btn-close-creator');
+        const btnSubmitQ = document.getElementById('btn-submit-question');
+        const btnSaveSc = document.getElementById('btn-save-score');
+        const btnRestart = document.getElementById('btn-trivia-restart');
+        
+        const playerNameInput = document.getElementById('trivia-player-name');
+        
+        // Load local records
+        state.triviaHighscore = parseInt(localStorage.getItem('thc_trivia_highscore') || '0');
+        state.triviaGamesPlayed = parseInt(localStorage.getItem('thc_trivia_games_played') || '0');
+        
+        document.getElementById('trivia-high-score').textContent = `${state.triviaHighscore} pts`;
+        document.getElementById('trivia-games-played').textContent = state.triviaGamesPlayed;
+        
+        // Auto fill nick if Snapchat nick exists
+        const snapNick = localStorage.getItem('thc_snap_nick');
+        if (snapNick && playerNameInput) {
+            playerNameInput.value = snapNick;
+        }
+
+        if (btnStart) {
+            btnStart.addEventListener('click', () => {
+                const name = playerNameInput.value.trim();
+                if (!name) {
+                    alert('Por favor, introduce tu nombre para jugar.');
+                    return;
+                }
+                state.triviaPlayerName = name;
+                startTriviaGame();
+                playChimeSound();
+            });
+        }
+
+        if (btnToggleCreator) {
+            btnToggleCreator.addEventListener('click', () => {
+                document.getElementById('trivia-question-creator').classList.toggle('hidden');
+                playPopSound();
+            });
+        }
+
+        if (btnCloseCreator) {
+            btnCloseCreator.addEventListener('click', () => {
+                document.getElementById('trivia-question-creator').classList.add('hidden');
+                playPopSound();
+            });
+        }
+
+        if (btnSubmitQ) {
+            btnSubmitQ.addEventListener('click', submitCustomQuestion);
+        }
+
+        if (btnSaveSc) {
+            btnSaveSc.addEventListener('click', saveTriviaScore);
+        }
+
+        if (btnRestart) {
+            btnRestart.addEventListener('click', () => {
+                document.getElementById('trivia-summary').classList.add('hidden');
+                document.getElementById('trivia-lobby').classList.remove('hidden');
+                playPopSound();
+            });
+        }
+
+        syncTriviaLeaderboard();
+        fetchCustomQuestions();
+    }
+
+    async function fetchCustomQuestions() {
+        if (state.isSupabaseReal) {
+            try {
+                const { data, error } = await supabase
+                    .from('thc_trivia_questions')
+                    .select('*');
+                if (!error && data) {
+                    state.triviaCustomQuestions = data;
+                }
+            } catch (e) {
+                console.error('Failed to fetch custom trivia questions:', e);
+            }
+        } else {
+            state.triviaCustomQuestions = JSON.parse(localStorage.getItem('thc_trivia_questions_local') || '[]');
+        }
+    }
+
+    async function submitCustomQuestion() {
+        const qText = document.getElementById('create-q-text').value.trim();
+        const options = Array.from(document.querySelectorAll('.create-q-option')).map(input => input.value.trim());
+        const correctIdx = parseInt(document.getElementById('create-q-correct').value);
+        const category = document.getElementById('create-q-category').value;
+        const creator = state.triviaPlayerName || 'Anónimo';
+        
+        if (!qText || options.some(opt => !opt)) {
+            alert('Por favor, rellena la pregunta y las 4 opciones.');
+            return;
+        }
+        
+        const newQ = {
+            question: qText,
+            options: options,
+            correct_index: correctIdx,
+            category: category,
+            creator: creator
+        };
+        
+        const submitBtn = document.getElementById('btn-submit-question');
+        submitBtn.disabled = true;
+        
+        if (state.isSupabaseReal) {
+            try {
+                const { error } = await supabase
+                    .from('thc_trivia_questions')
+                    .insert([newQ]);
+                if (error) throw error;
+                alert('¡Pregunta guardada con éxito en la base de datos!');
+            } catch (err) {
+                console.error('Failed to submit question:', err);
+                alert('Error al guardar la pregunta.');
+            }
+        } else {
+            // Local
+            const localQ = JSON.parse(localStorage.getItem('thc_trivia_questions_local') || '[]');
+            localQ.push(newQ);
+            localStorage.setItem('thc_trivia_questions_local', JSON.stringify(localQ));
+            alert('Pregunta guardada en la base de datos local sandbox.');
+        }
+        
+        // Reset fields
+        document.getElementById('create-q-text').value = '';
+        document.querySelectorAll('.create-q-option').forEach(input => input.value = '');
+        document.getElementById('trivia-question-creator').classList.add('hidden');
+        submitBtn.disabled = false;
+        
+        playChimeSound();
+        fetchCustomQuestions();
+    }
+
+    // Game loop logic
+    function startTriviaGame() {
+        document.getElementById('trivia-lobby').classList.add('hidden');
+        document.getElementById('trivia-game').classList.remove('hidden');
+        
+        state.triviaCurrentIndex = 0;
+        state.triviaCurrentScore = 0;
+        state.triviaCorrectAnswers = 0;
+        
+        // Combine preset and custom questions
+        let allQuestions = [...presetTriviaQuestions, ...state.triviaCustomQuestions];
+        
+        // Filter by category
+        const cat = document.getElementById('trivia-category-select').value;
+        if (cat !== 'all') {
+            allQuestions = allQuestions.filter(q => q.category === cat);
+        }
+        
+        // Fallback if no questions found in category
+        if (allQuestions.length === 0) {
+            allQuestions = [...presetTriviaQuestions];
+        }
+        
+        // Shuffle questions
+        allQuestions.sort(() => Math.random() - 0.5);
+        state.triviaQuestions = allQuestions.slice(0, 10); // play 10 questions
+        
+        showTriviaQuestion();
+    }
+
+    function showTriviaQuestion() {
+        if (state.triviaCurrentIndex >= state.triviaQuestions.length) {
+            endTriviaGame();
+            return;
+        }
+        
+        const q = state.triviaQuestions[state.triviaCurrentIndex];
+        
+        document.getElementById('trivia-current-index').textContent = state.triviaCurrentIndex + 1;
+        document.getElementById('trivia-total-count').textContent = state.triviaQuestions.length;
+        document.getElementById('trivia-current-score').textContent = state.triviaCurrentScore;
+        
+        const progressPercent = ((state.triviaCurrentIndex) / state.triviaQuestions.length) * 100;
+        document.getElementById('trivia-progress-fill').style.width = `${progressPercent}%`;
+        
+        document.getElementById('trivia-question-category').textContent = q.category.toUpperCase();
+        document.getElementById('trivia-question-text').textContent = q.question;
+        
+        // Options container
+        const container = document.getElementById('trivia-options-container');
+        container.innerHTML = '';
+        
+        q.options.forEach((opt, idx) => {
+            const btn = document.createElement('button');
+            btn.className = 'trivia-option-btn';
+            btn.innerHTML = `<span class="option-lbl">${String.fromCharCode(65 + idx)})</span> ${escapeHtml(opt)}`;
+            
+            btn.addEventListener('click', () => {
+                handleOptionSelection(idx, btn);
+            });
+            
+            container.appendChild(btn);
+        });
+        
+        startQuestionTimer();
+    }
+
+    function startQuestionTimer() {
+        if (state.triviaTimerInterval) clearInterval(state.triviaTimerInterval);
+        
+        state.triviaSecondsRemaining = 15;
+        const timeDisplay = document.getElementById('trivia-seconds-remaining');
+        const fillBar = document.getElementById('trivia-timer-fill');
+        
+        timeDisplay.textContent = state.triviaSecondsRemaining;
+        fillBar.style.width = '100%';
+        fillBar.style.backgroundColor = '#22c55e';
+        
+        state.triviaTimerInterval = setInterval(() => {
+            state.triviaSecondsRemaining -= 0.1;
+            const secondsInt = Math.ceil(state.triviaSecondsRemaining);
+            timeDisplay.textContent = secondsInt > 0 ? secondsInt : 0;
+            
+            const pct = (state.triviaSecondsRemaining / 15) * 100;
+            fillBar.style.width = `${pct}%`;
+            
+            // Color shifts
+            if (state.triviaSecondsRemaining > 10) {
+                fillBar.style.backgroundColor = '#22c55e'; // green
+            } else if (state.triviaSecondsRemaining > 5) {
+                fillBar.style.backgroundColor = '#f97316'; // orange
+            } else {
+                fillBar.style.backgroundColor = '#ef4444'; // red
+            }
+            
+            if (state.triviaSecondsRemaining <= 0) {
+                clearInterval(state.triviaTimerInterval);
+                handleTimeOut();
+            }
+        }, 100);
+    }
+
+    function handleOptionSelection(selectedIdx, clickedBtn) {
+        clearInterval(state.triviaTimerInterval);
+        
+        const q = state.triviaQuestions[state.triviaCurrentIndex];
+        const optionButtons = document.querySelectorAll('.trivia-option-btn');
+        
+        // Disable click handlers
+        optionButtons.forEach(btn => btn.disabled = true);
+        
+        const toast = document.getElementById('trivia-feedback-toast');
+        toast.classList.remove('hidden');
+        
+        if (selectedIdx === q.correct_index) {
+            // Correct!
+            clickedBtn.classList.add('correct');
+            state.triviaCorrectAnswers++;
+            
+            // Calculate speed score: 50 base points + remaining seconds * 3.3 (max 100 total)
+            const speedPoints = Math.floor(state.triviaSecondsRemaining * 3.3);
+            const gained = 50 + speedPoints;
+            state.triviaCurrentScore += gained;
+            
+            toast.className = 'trivia-feedback-toast';
+            toast.style.borderColor = '#22c55e';
+            toast.innerHTML = `<i class="fa-solid fa-circle-check" style="color: #22c55e;"></i> ¡Correcto! +${gained} pts`;
+            
+            playChimeSound();
+        } else {
+            // Incorrect
+            clickedBtn.classList.add('incorrect');
+            optionButtons[q.correct_index].classList.add('correct');
+            
+            toast.className = 'trivia-feedback-toast';
+            toast.style.borderColor = '#ef4444';
+            toast.innerHTML = `<i class="fa-solid fa-circle-xmark" style="color: #ef4444;"></i> ¡Incorrecto!`;
+            
+            // Play fail buzz
+            playPopSound();
+        }
+        
+        setTimeout(() => {
+            toast.classList.add('hidden');
+            state.triviaCurrentIndex++;
+            showTriviaQuestion();
+        }, 2200);
+    }
+
+    function handleTimeOut() {
+        const q = state.triviaQuestions[state.triviaCurrentIndex];
+        const optionButtons = document.querySelectorAll('.trivia-option-btn');
+        optionButtons.forEach(btn => btn.disabled = true);
+        
+        // Highlight correct option
+        optionButtons[q.correct_index].classList.add('correct');
+        
+        const toast = document.getElementById('trivia-feedback-toast');
+        toast.classList.remove('hidden');
+        toast.className = 'trivia-feedback-toast';
+        toast.style.borderColor = '#ef4444';
+        toast.innerHTML = `<i class="fa-solid fa-hourglass-end" style="color: #ef4444;"></i> ¡Tiempo agotado!`;
+        
+        playPopSound();
+        
+        setTimeout(() => {
+            toast.classList.add('hidden');
+            state.triviaCurrentIndex++;
+            showTriviaQuestion();
+        }, 2200);
+    }
+
+    function endTriviaGame() {
+        if (state.triviaTimerInterval) clearInterval(state.triviaTimerInterval);
+        
+        document.getElementById('trivia-game').classList.add('hidden');
+        document.getElementById('trivia-summary').classList.remove('hidden');
+        
+        document.getElementById('res-score').textContent = state.triviaCurrentScore;
+        document.getElementById('res-correct').textContent = `${state.triviaCorrectAnswers}/${state.triviaQuestions.length}`;
+        
+        // Update stats
+        state.triviaGamesPlayed++;
+        localStorage.setItem('thc_trivia_games_played', state.triviaGamesPlayed);
+        document.getElementById('trivia-games-played').textContent = state.triviaGamesPlayed;
+        
+        if (state.triviaCurrentScore > state.triviaHighscore) {
+            state.triviaHighscore = state.triviaCurrentScore;
+            localStorage.setItem('thc_trivia_highscore', state.triviaHighscore);
+            document.getElementById('trivia-high-score').textContent = `${state.triviaHighscore} pts`;
+            playChimeSound();
+        }
+        
+        // Reset save score button
+        const saveBtn = document.getElementById('btn-save-score');
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Guardar Puntuación en el Ranking';
+    }
+
+    async function saveTriviaScore() {
+        const saveBtn = document.getElementById('btn-save-score');
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
+        
+        const newRecord = {
+            username: state.triviaPlayerName,
+            score: state.triviaCurrentScore,
+            correct_answers: state.triviaCorrectAnswers,
+            total_questions: state.triviaQuestions.length
+        };
+        
+        if (state.isSupabaseReal) {
+            try {
+                const { error } = await supabase
+                    .from('thc_trivia_leaderboard')
+                    .insert([newRecord]);
+                if (error) throw error;
+                alert('¡Puntuación guardada en la clasificación de Supabase!');
+            } catch (err) {
+                console.error('Failed to save score:', err);
+                alert('Error al sincronizar puntuación.');
+            }
+        } else {
+            // Local
+            const localLb = JSON.parse(localStorage.getItem('thc_trivia_leaderboard_local') || '[]');
+            localLb.push(newRecord);
+            localStorage.setItem('thc_trivia_leaderboard_local', JSON.stringify(localLb));
+            alert('Puntuación guardada localmente.');
+        }
+        
+        saveBtn.innerHTML = '<i class="fa-solid fa-check"></i> Guardado';
+        
+        syncTriviaLeaderboard();
+        playChimeSound();
+    }
+
+    async function syncTriviaLeaderboard() {
+        let records = [];
+        if (state.isSupabaseReal) {
+            try {
+                const { data, error } = await supabase
+                    .from('thc_trivia_leaderboard')
+                    .select('*')
+                    .order('score', { ascending: false })
+                    .limit(10);
+                if (!error && data) records = data;
+            } catch (e) {
+                console.error('Failed to sync trivia leaderboard:', e);
+            }
+        } else {
+            records = JSON.parse(localStorage.getItem('thc_trivia_leaderboard_local') || '[]');
+            records.sort((a, b) => b.score - a.score);
+            records = records.slice(0, 10);
+        }
+        
+        const container = document.getElementById('trivia-leaderboard-container');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        if (records.length === 0) {
+            container.innerHTML = `<li style="font-size: 0.72rem; color: var(--text-muted); text-align: center; padding: 0.5rem 0;">No hay puntuaciones registradas. ¡Sé el primero!</li>`;
+            return;
+        }
+        
+        records.forEach((rec, idx) => {
+            const item = document.createElement('li');
+            item.className = 'trivia-leaderboard-item';
+            
+            const medal = idx === 0 ? '👑' : `[${idx + 1}]`;
+            
+            item.innerHTML = `
+                <span class="rank-num">${medal}</span>
+                <span class="player-name">${rec.username}</span>
+                <span class="player-score">${rec.score} pts</span>
+            `;
+            container.appendChild(item);
+        });
+    }
+
 
     // --- UTILS ---
     function escapeHtml(text) {

@@ -42,9 +42,14 @@
             <button class="tab-btn" data-tab="pixel-art-view">
                 <i class="fa-solid fa-palette"></i> <span>Pizarra Completa</span>
             </button>
+            <button class="tab-btn" data-tab="snap-chat-view">
+                <i class="fa-solid fa-camera"></i> <span>SnapChat THC</span>
+            </button>
+            <button class="tab-btn" data-tab="trivia-view">
+                <i class="fa-solid fa-circle-question"></i> <span>Trivia THC</span>
+            </button>
         </nav>
 
-        <!-- Live Server Status Bar -->
         <div class="server-status-bar">
             <div class="status-indicator">
                 <span class="status-dot online"></span>
@@ -299,6 +304,360 @@
             </div>
         </main>
 
+        <!-- VIEW 3: SNAPCHAT VIEW -->
+        <main class="dashboard-container tab-view hidden" id="snap-chat-view">
+            <!-- If user is not logged into SnapChat (needs nickname & code) -->
+            <div class="snap-login-panel glass-panel" id="snap-login-container">
+                <div class="panel-header">
+                    <h2><i class="fa-solid fa-ghost text-gold"></i> Entrar a SnapChat THC</h2>
+                </div>
+                <div class="panel-content">
+                    <p class="panel-description">Ingresa tu apodo y código de sala compartida para ver y publicar fotos en tiempo real con tus amigos.</p>
+                    <div class="form-group">
+                        <label for="snap-nick-input">Tu Apodo / Nickname</label>
+                        <input type="text" id="snap-nick-input" placeholder="Ej. GamerX, WeedLover..." maxlength="15">
+                    </div>
+                    <div class="form-group spacer-top-xs">
+                        <label for="snap-code-input">Código de Sala</label>
+                        <input type="text" id="snap-code-input" placeholder="Ej. THC_GANG_2026, SALAPRO..." maxlength="20">
+                    </div>
+                    <button class="btn btn-primary w-100 spacer-top" id="btn-snap-login">
+                        <i class="fa-solid fa-right-to-bracket"></i> Entrar al Canal de Fotos
+                    </button>
+                </div>
+            </div>
+
+            <!-- If user is logged into SnapChat -->
+            <div class="snap-main-panel hidden" id="snap-main-container">
+                <!-- Sidebar: Streaks and Users -->
+                <aside class="sidebar-left">
+                    <div class="glass-panel user-streaks-widget">
+                        <div class="panel-header flex-header">
+                            <h3><i class="fa-solid fa-fire text-orange"></i> Rachas</h3>
+                            <button class="btn-icon" id="btn-snap-logout" title="Cerrar Sesión / Cambiar Sala">
+                                <i class="fa-solid fa-right-from-bracket"></i>
+                            </button>
+                        </div>
+                        <div class="panel-content">
+                            <!-- Group Streak first -->
+                            <div class="group-streak-box">
+                                <span class="streak-label">Racha Grupal</span>
+                                <span class="streak-val" id="group-streak-display">🔥 0</span>
+                            </div>
+                            
+                            <h4 class="sidebar-section-title spacer-top-xs">Rachas Individuales</h4>
+                            <div class="scrollable" style="max-height: 250px;">
+                                <ul class="user-streaks-list" id="snap-streaks-list">
+                                    <!-- Dynamic Individual Streaks -->
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Room/User info -->
+                    <div class="glass-panel room-info-widget spacer-top">
+                        <div class="panel-content">
+                            <div class="stat-row">
+                                <span class="stat-name">Nick:</span>
+                                <span class="stat-value text-green" id="snap-user-display">-</span>
+                            </div>
+                            <div class="stat-row spacer-top-xs">
+                                <span class="stat-name">Sala:</span>
+                                <span class="stat-value text-gold" id="snap-room-display">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- Center Content: Stories feed, Camera upload, Calendar Archive -->
+                <section class="main-content">
+                    <!-- SNAPCHAT SUB-NAV -->
+                    <div class="snap-tabs-bar">
+                        <button class="snap-tab-btn active" data-snap-subtab="snap-feed-subtab">
+                            <i class="fa-solid fa-images"></i> Muro de Snaps
+                        </button>
+                        <button class="snap-tab-btn" data-snap-subtab="snap-camera-subtab">
+                            <i class="fa-solid fa-circle-dot"></i> Captura / Subir
+                        </button>
+                        <button class="snap-tab-btn" data-snap-subtab="snap-archive-subtab">
+                            <i class="fa-solid fa-calendar-days"></i> Calendario de Tops
+                        </button>
+                    </div>
+
+                    <!-- SUBTAB 1: Stories & Snaps Feed -->
+                    <div class="snap-subtab-view" id="snap-feed-subtab">
+                        <div class="section-title-wrapper">
+                            <h3><i class="fa-solid fa-bolt text-green"></i> Historias Recientes (24h)</h3>
+                        </div>
+                        
+                        <!-- Stories circle list -->
+                        <div class="stories-horizontal-list" id="stories-circles-container">
+                            <!-- Story circular bubbles clickable to watch -->
+                        </div>
+
+                        <!-- Active Feed List (Traditional Scroll view) -->
+                        <div class="snap-feed-timeline spacer-top" id="snap-feed-timeline">
+                            <!-- Public Feed snaps -->
+                        </div>
+                    </div>
+
+                    <!-- SUBTAB 2: Camera Capture / Upload -->
+                    <div class="snap-subtab-view hidden" id="snap-camera-subtab">
+                        <div class="camera-card glass-panel">
+                            <div class="camera-viewfinder-wrapper">
+                                <video id="camera-video" autoplay playsinline class="camera-video"></video>
+                                <canvas id="camera-canvas" class="hidden"></canvas>
+                                <img id="captured-preview" class="captured-preview-img hidden">
+                                <div class="viewfinder-overlay">
+                                    <span class="camera-status-text" id="camera-status-text">Cámara apagada</span>
+                                </div>
+                            </div>
+                            
+                            <div class="camera-controls">
+                                <button class="btn btn-secondary" id="btn-toggle-camera">
+                                    <i class="fa-solid fa-power-off"></i> Encender Cámara
+                                </button>
+                                <button class="btn btn-primary hidden" id="btn-capture-snap">
+                                    <i class="fa-solid fa-camera"></i> Capturar Foto
+                                </button>
+                                <button class="btn btn-danger hidden" id="btn-retake-snap">
+                                    <i class="fa-solid fa-rotate-left"></i> Repetir
+                                </button>
+                            </div>
+
+                            <div class="file-upload-divider">
+                                <span>O sube una imagen local</span>
+                            </div>
+
+                            <div class="file-upload-box">
+                                <input type="file" id="snap-file-input" accept="image/*" class="file-input">
+                                <label for="snap-file-input" class="btn btn-secondary w-100">
+                                    <i class="fa-solid fa-upload"></i> Seleccionar Imagen Local
+                                </label>
+                            </div>
+
+                            <div class="snap-meta-inputs spacer-top-xs">
+                                <div class="form-group">
+                                    <input type="text" id="snap-caption-input" placeholder="Añade un comentario..." maxlength="80">
+                                </div>
+                                <div class="form-group spacer-top-xs">
+                                    <label for="snap-recipient-select">Enviar a:</label>
+                                    <select id="snap-recipient-select">
+                                        <option value="group">Todos (Muro del Grupo)</option>
+                                    </select>
+                                </div>
+                                <button class="btn btn-success w-100 spacer-top-xs" id="btn-send-snap" disabled>
+                                    <i class="fa-solid fa-paper-plane"></i> Enviar Snap 🔥
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SUBTAB 3: Top Photo Calendar Archive -->
+                    <div class="snap-subtab-view hidden" id="snap-archive-subtab">
+                        <div class="section-title-wrapper">
+                            <h3><i class="fa-solid fa-trophy text-gold"></i> Archivo de Tops Diarios</h3>
+                            <p class="panel-description">Las fotos más votadas de cada día se guardan en el calendario.</p>
+                        </div>
+                        
+                        <div class="calendar-header-controls">
+                            <button class="btn btn-sm btn-secondary" id="btn-prev-month"><i class="fa-solid fa-chevron-left"></i></button>
+                            <h4 id="calendar-month-year">Mayo 2026</h4>
+                            <button class="btn btn-sm btn-secondary" id="btn-next-month"><i class="fa-solid fa-chevron-right"></i></button>
+                        </div>
+
+                        <div class="calendar-grid-container">
+                            <div class="calendar-weekdays">
+                                <div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div><div>Dom</div>
+                            </div>
+                            <div class="calendar-days" id="calendar-days-grid">
+                                <!-- Dynamic calendar day cells -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <!-- VIEW 4: TRIVIA VIEW -->
+        <main class="dashboard-container tab-view hidden" id="trivia-view">
+            <!-- Left Column: Trivia Info & Leaderboard -->
+            <aside class="sidebar-left">
+                <div class="glass-panel trivia-leaderboard-card">
+                    <div class="panel-header">
+                        <h3><i class="fa-solid fa-trophy text-gold"></i> Top Clasificación</h3>
+                    </div>
+                    <div class="panel-content">
+                        <ul class="trivia-leaderboard-list" id="trivia-leaderboard-container">
+                            <!-- Dynamic scoreboard rows from Supabase -->
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="glass-panel trivia-local-stats spacer-top">
+                    <div class="panel-header">
+                        <h3><i class="fa-solid fa-chart-bar text-green"></i> Tus Estadísticas</h3>
+                    </div>
+                    <div class="panel-content">
+                        <div class="stat-row">
+                            <span class="stat-name">Puntos Récord:</span>
+                            <span class="stat-value text-green" id="trivia-high-score">0 pts</span>
+                        </div>
+                        <div class="stat-row spacer-top-xs">
+                            <span class="stat-name">Partidas Jugadas:</span>
+                            <span class="stat-value" id="trivia-games-played">0</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Center Content: Game Panel -->
+            <section class="main-content">
+                <!-- PANEL 1: START LOBBY -->
+                <div class="trivia-lobby-panel glass-panel" id="trivia-lobby">
+                    <div class="lobby-header-badge">
+                        <i class="fa-solid fa-circle-question lobby-icon animate-pulse"></i>
+                    </div>
+                    <h2>Trivia THC Labs</h2>
+                    <p class="panel-description">Pon a prueba tus conocimientos sobre videojuegos, tecnología y cultura pop. Responde rápido para conseguir más puntos.</p>
+                    
+                    <div class="form-group spacer-top">
+                        <label for="trivia-player-name">Tu Nombre para el Ránking</label>
+                        <input type="text" id="trivia-player-name" placeholder="Ingresa tu apodo..." maxlength="15">
+                    </div>
+
+                    <div class="form-group spacer-top-xs">
+                        <label for="trivia-category-select">Selecciona Categoría</label>
+                        <select id="trivia-category-select">
+                            <option value="all">Todas las Categorías</option>
+                            <option value="videojuegos">Videojuegos</option>
+                            <option value="tecnologia">Tecnología y Código</option>
+                            <option value="cultura">Cultura Pop / General</option>
+                        </select>
+                    </div>
+
+                    <button class="btn btn-primary w-100 spacer-top" id="btn-start-trivia">
+                        <i class="fa-solid fa-gamepad"></i> Iniciar Desafío 🔥
+                    </button>
+                    
+                    <button class="btn btn-secondary w-100 spacer-top-xs" id="btn-toggle-question-creator">
+                        <i class="fa-solid fa-plus"></i> Añadir Pregunta Personalizada
+                    </button>
+                </div>
+
+                <!-- PANEL 2: ACTIVE TRIVIA GAME -->
+                <div class="trivia-game-panel glass-panel hidden" id="trivia-game">
+                    <div class="game-header-stats">
+                        <div class="progress-indicator">
+                            Pregunta <span id="trivia-current-index">1</span> de <span id="trivia-total-count">10</span>
+                        </div>
+                        <div class="score-display">
+                            Puntos: <span id="trivia-current-score" class="text-green">0</span>
+                        </div>
+                    </div>
+
+                    <!-- Progress bar -->
+                    <div class="trivia-progress-bar">
+                        <div class="trivia-progress-fill" id="trivia-progress-fill" style="width: 10%;"></div>
+                    </div>
+
+                    <!-- Timer bar -->
+                    <div class="trivia-timer-wrapper spacer-top-xs">
+                        <div class="timer-label"><i class="fa-regular fa-clock"></i> Tiempo: <span id="trivia-seconds-remaining">15</span>s</div>
+                        <div class="timer-bar-outer">
+                            <div class="timer-bar-inner" id="trivia-timer-fill" style="width: 100%;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Question Container -->
+                    <div class="trivia-question-box spacer-top">
+                        <span class="trivia-category-badge" id="trivia-question-category">Videojuegos</span>
+                        <h3 class="trivia-question-text" id="trivia-question-text">-</h3>
+                    </div>
+
+                    <!-- Options list -->
+                    <div class="trivia-options-grid spacer-top" id="trivia-options-container">
+                        <!-- 4 choices buttons -->
+                    </div>
+
+                    <!-- Toast Feedback (Correct / Incorrect / Out of Time) -->
+                    <div class="trivia-feedback-toast hidden" id="trivia-feedback-toast">
+                        ¡Excelente! +100 puntos
+                    </div>
+                </div>
+
+                <!-- PANEL 3: GAME OVER SUMMARY -->
+                <div class="trivia-summary-panel glass-panel hidden" id="trivia-summary">
+                    <div class="summary-badge">
+                        <i class="fa-solid fa-trophy text-gold"></i>
+                    </div>
+                    <h2>¡Fin de la Partida!</h2>
+                    <p class="panel-description">Has completado el cuestionario de Trivia THC Labs.</p>
+
+                    <div class="results-stats-row spacer-top">
+                        <div class="result-box">
+                            <span class="res-num text-green" id="res-score">0</span>
+                            <span class="res-lbl">Puntos Totales</span>
+                        </div>
+                        <div class="result-box">
+                            <span class="res-num" id="res-correct">0/10</span>
+                            <span class="res-lbl">Respuestas Correctas</span>
+                        </div>
+                    </div>
+
+                    <div class="summary-actions spacer-top">
+                        <button class="btn btn-primary w-100" id="btn-save-score">
+                            <i class="fa-solid fa-cloud-arrow-up"></i> Guardar Puntuación en el Ranking
+                        </button>
+                        <button class="btn btn-secondary w-100 spacer-top-xs" id="btn-trivia-restart">
+                            <i class="fa-solid fa-arrow-rotate-left"></i> Jugar Otra Vez
+                        </button>
+                    </div>
+                </div>
+
+                <!-- PANEL 4: CUSTOM QUESTION CREATOR (Toggled drop-down) -->
+                <div class="trivia-creator-panel glass-panel hidden" id="trivia-question-creator">
+                    <div class="panel-header flex-header">
+                        <h3>Añadir Pregunta a la Base de Datos</h3>
+                        <button class="btn-icon" id="btn-close-creator" title="Cerrar"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <div class="panel-content">
+                        <div class="form-group">
+                            <label for="create-q-text">Pregunta</label>
+                            <input type="text" id="create-q-text" placeholder="Ej. ¿En qué año se lanzó Half-Life 2?">
+                        </div>
+                        <div class="form-group spacer-top-xs">
+                            <label>Opciones (Introduce 4 respuestas)</label>
+                            <input type="text" class="create-q-option spacer-top-xxs" placeholder="Opción A (Incorrecta)" data-idx="0">
+                            <input type="text" class="create-q-option spacer-top-xxs" placeholder="Opción B (Incorrecta)" data-idx="1">
+                            <input type="text" class="create-q-option spacer-top-xxs" placeholder="Opción C (Incorrecta)" data-idx="2">
+                            <input type="text" class="create-q-option spacer-top-xxs" placeholder="Opción D (Incorrecta)" data-idx="3">
+                        </div>
+                        <div class="form-group spacer-top-xs">
+                            <label for="create-q-correct">¿Cuál es la opción correcta?</label>
+                            <select id="create-q-correct">
+                                <option value="0">Opción A</option>
+                                <option value="1">Opción B</option>
+                                <option value="2">Opción C</option>
+                                <option value="3">Opción D</option>
+                            </select>
+                        </div>
+                        <div class="form-group spacer-top-xs">
+                            <label for="create-q-category">Categoría</label>
+                            <select id="create-q-category">
+                                <option value="videojuegos">Videojuegos</option>
+                                <option value="tecnologia">Tecnología y Código</option>
+                                <option value="cultura">Cultura Pop / General</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-success w-100 spacer-top" id="btn-submit-question">
+                            <i class="fa-solid fa-plus"></i> Guardar Pregunta
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
     </div>
 
     <!-- MODAL FOR ADDING APP SUBDOMAIN -->
@@ -409,6 +768,36 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" id="btn-cancel-discord">Cancelar</button>
                 <button class="btn btn-primary" id="btn-save-discord">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL FOR WATCHING STORY -->
+    <div class="modal-backdrop hidden" id="modal-story-viewer">
+        <div class="story-viewer-container glass-panel">
+            <div class="story-progress-bar-wrapper">
+                <div class="story-progress-bar-fill" id="story-progress-fill"></div>
+            </div>
+            <div class="story-viewer-header">
+                <div class="story-user-info">
+                    <div class="story-avatar" id="story-avatar-display">GT</div>
+                    <div class="story-user-details">
+                        <span class="story-username" id="story-username-display">GamerTHC</span>
+                        <span class="story-time" id="story-time-display">Hace 3 horas</span>
+                    </div>
+                </div>
+                <button class="story-close-btn" id="btn-close-story"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <div class="story-viewer-body">
+                <img id="story-image-display" src="" alt="Snap story">
+                <div class="story-caption-overlay" id="story-caption-display">Caption de la foto</div>
+            </div>
+            
+            <div class="story-viewer-footer">
+                <button class="story-like-btn" id="btn-like-story">
+                    <i class="fa-solid fa-heart"></i> <span id="story-likes-count">0</span>
+                </button>
             </div>
         </div>
     </div>
