@@ -646,122 +646,58 @@ document.addEventListener('DOMContentLoaded', () => {
         toolEraseBtn.classList.toggle('active', state.activeTool === 'erase');
     }
 
-    // --- REAL DISCORD WIDGET INTEGRATION (CORS PROXY) ---
-    async function fetchRealDiscordWidget() {
+    // --- REAL DISCORD WIDGET INTEGRATION (IFRAME EMBED) ---
+    function fetchRealDiscordWidget() {
         if (!state.discordGuildId) {
             renderSimulatedDiscord();
             return;
         }
 
-        try {
-            // Fetch Discord Widget JSON using corsproxy.io to bypass SOP/CORS restrictions
-            const url = `https://discord.com/api/guilds/${state.discordGuildId}/widget.json`;
-            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-            
-            const response = await fetch(proxyUrl);
-            if (!response.ok) throw new Error('Guild not found or widget disabled');
-            
-            const data = await response.json();
-            
-            state.isDiscordReal = true;
-            renderRealDiscord(data);
-        } catch (err) {
-            console.error('Discord API Widget query failed (falling back to simulation):', err);
-            renderSimulatedDiscord(true); // pass true to show config warning
-        }
-    }
-
-    function renderRealDiscord(data) {
-        // Set Header link to point to real invite if exists
-        if (data.instant_invite) {
-            discordHeaderLink.href = data.instant_invite;
-        }
-
-        // Render Online count
-        const members = data.members || [];
-        onlineCounter.textContent = `${members.length} online`;
-
-        // Render Members list
-        discordUsers.innerHTML = '';
-        if (members.length === 0) {
-            discordUsers.innerHTML = `<li style="font-size: 0.75rem; color: var(--text-muted); text-align: center; padding: 1rem;">Nadie conectado ahora mismo.</li>`;
-        } else {
-            members.forEach(member => {
-                const item = document.createElement('li');
-                item.className = 'discord-user-card';
-                
-                let statusClass = 'online';
-                if (member.status === 'idle') statusClass = 'idle';
-                if (member.status === 'dnd') statusClass = 'dnd';
-
-                const gameName = member.game ? member.game.name : null;
-                const gameText = gameName ? `Jugando a <strong>${gameName}</strong>` : `<span style="opacity: 0.5;">En línea</span>`;
-
-                const avatarSrc = member.avatar_url;
-                const avatarHtml = avatarSrc 
-                    ? `<img src="${avatarSrc}" class="user-avatar" alt="${member.username}">`
-                    : `<div class="user-avatar" style="background-color: var(--green-muted); width: 100%; height: 100%; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.8rem;">${member.username.substring(0, 2).toUpperCase()}</div>`;
-
-                item.innerHTML = `
-                    <div class="avatar-wrapper">
-                        ${avatarHtml}
-                        <span class="user-status-dot ${statusClass}"></span>
-                    </div>
-                    <div class="user-info">
-                        <span class="user-name">${member.username}</span>
-                        <span class="user-game">${gameText}</span>
-                    </div>
-                `;
-                discordUsers.appendChild(item);
-            });
-        }
-
-        // Render Voice Channels & Users
-        vcUsersList.innerHTML = '';
-        const voiceChannels = (data.channels || []).filter(c => c.name.toLowerCase().includes('general') || c.name.toLowerCase().includes('voz') || c.id);
+        state.isDiscordReal = true;
         
-        let usersInVoice = [];
-        let activeVcName = 'Sin canales activos';
-
-        // Find voice channels containing users
-        if (members.length > 0) {
-            // Find channels that have users inside
-            const channelsWithMembers = voiceChannels.filter(c => members.some(m => m.channel_id === c.id));
-            if (channelsWithMembers.length > 0) {
-                const activeChannel = channelsWithMembers[0];
-                activeVcName = activeChannel.name;
-                usersInVoice = members.filter(m => m.channel_id === activeChannel.id);
-            } else if (voiceChannels.length > 0) {
-                activeVcName = voiceChannels[0].name;
-            }
+        // Render official Discord Iframe widget
+        const widgetBody = document.querySelector('.discord-widget .panel-content');
+        if (widgetBody) {
+            widgetBody.classList.remove('scrollable'); // Scroll handles internally in iframe
+            widgetBody.style.padding = '0';
+            widgetBody.innerHTML = `
+                <iframe src="https://discord.com/widget?id=${state.discordGuildId}&theme=dark" 
+                        width="100%" 
+                        height="360" 
+                        allowtransparency="true" 
+                        frameborder="0" 
+                        sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
+                        style="border: none; width: 100%; height: 360px; display: block; border-radius: 8px;">
+                </iframe>
+            `;
         }
 
-        vcChannelName.innerHTML = `Canal de Voz: <strong>${activeVcName}</strong>`;
-
-        if (usersInVoice.length === 0) {
+        // Hide local Voice Chat channel overlay because the iframe widget displays it natively!
+        if (vcChannelPanel) {
             vcChannelPanel.style.display = 'none';
-        } else {
-            vcChannelPanel.style.display = 'block';
-            usersInVoice.forEach(member => {
-                const tag = document.createElement('div');
-                tag.className = 'vc-user-tag';
-                tag.innerHTML = `
-                    <i class="fa-solid fa-microphone"></i>
-                    <span style="font-weight: 500;">${member.username}</span>
-                `;
-                vcUsersList.appendChild(tag);
-            });
         }
+
+        onlineCounter.textContent = `En vivo`;
     }
 
     function renderSimulatedDiscord(showWarning = false) {
         state.isDiscordReal = false;
         
+        const widgetBody = document.querySelector('.discord-widget .panel-content');
+        if (widgetBody) {
+            widgetBody.classList.add('scrollable');
+            widgetBody.style.padding = '1rem';
+            widgetBody.innerHTML = `<ul class="discord-user-list" id="discord-users"></ul>`;
+        }
+        
+        const discordUsersList = document.getElementById('discord-users');
+        if (!discordUsersList) return;
+
         // Render online count
         onlineCounter.textContent = `3 online`;
 
         // Render simulated members
-        discordUsers.innerHTML = '';
+        discordUsersList.innerHTML = '';
         
         if (showWarning) {
             const warnItem = document.createElement('li');
@@ -773,7 +709,7 @@ document.addEventListener('DOMContentLoaded', () => {
             warnItem.style.borderRadius = '4px';
             warnItem.style.marginBottom = '0.6rem';
             warnItem.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ID Discord inválido o Widget inactivo. Ajusta la ID en la rueda dentada.`;
-            discordUsers.appendChild(warnItem);
+            discordUsersList.appendChild(warnItem);
         }
 
         const simulatedFriends = [
@@ -801,7 +737,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="user-game">Jugando a <strong>${user.game}</strong></span>
                 </div>
             `;
-            discordUsers.appendChild(item);
+            discordUsersList.appendChild(item);
         });
 
         vcChannelPanel.style.display = 'block';
