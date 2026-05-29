@@ -2706,7 +2706,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (error) throw error;
                 } catch (err) {
                     console.error('Failed to save email request to Supabase:', err);
-                    alert('Error de conexión al registrar en Supabase. Se enviará únicamente por correo.');
                 }
             } else {
                 // Local fallback
@@ -2717,35 +2716,82 @@ document.addEventListener('DOMContentLoaded', () => {
 
             playChimeSound();
 
-            // Prepare mailto composition
-            const adminEmail = 'didac@thehashcode.org';
-            const subject = encodeURIComponent('[THC Labs] Solicitud de Alias de Correo @thehashcode.org');
-            const body = encodeURIComponent(
-                `Hola Dídac,\n\n` +
-                `Quiero solicitar la creación de un alias de correo electrónico redireccionado:\n` +
-                `Alias solicitado: ${cleanAlias}@thehashcode.org\n` +
-                `Redireccionar a mi correo personal: ${forward}\n\n` +
-                `Quedo a la espera de la confirmación y el correo automático de verificación para activarlo.\n\n` +
-                `¡Muchas gracias!`
-            );
+            // Attempt to trigger the Cloudflare API automation backend
+            let automated = false;
+            let automationError = null;
 
-            // Open mail client
-            window.location.href = `mailto:${adminEmail}?subject=${subject}&body=${body}`;
+            try {
+                const response = await fetch('/api/request-email', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        alias: cleanAlias,
+                        forward: forward
+                    })
+                });
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    automated = true;
+                } else {
+                    automationError = data.message || data.error || 'Error desconocido';
+                }
+            } catch (err) {
+                console.error('Email Routing automation endpoint failed:', err);
+                automationError = err.message;
+            }
 
-            // Success Alert popup
-            setTimeout(() => {
-                alert(
-                    `¡Solicitud registrada!\n\n` +
-                    `Se ha guardado tu solicitud para crear el alias "${cleanAlias}@thehashcode.org" apuntando a "${forward}".\n\n` +
-                    `IMPORTANTE: Recuerda que es muy probable que tengas que activar tu dirección una vez configurado el alias mediante un enlace de verificación automático que recibirás en tu buzón de correo.`
+            if (automated) {
+                setTimeout(() => {
+                    alert(
+                        `¡Alias configurado automáticamente! 🎉\n\n` +
+                        `Hemos configurado tu redirección "${cleanAlias}@thehashcode.org" apuntando a "${forward}" en Cloudflare.\n\n` +
+                        `IMPORTANTE: Revisa tu correo de destino ("${forward}"). Cloudflare te enviará un correo automático de verificación. Debes confirmar la activación para empezar a recibir mensajes.`
+                    );
+                    
+                    // Clear fields
+                    aliasInput.value = '';
+                    forwardInput.value = '';
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Enviar Solicitud y Notificar 🔥';
+                }, 1000);
+            } else {
+                // Fall back to mailto client if automation is not configured or fails
+                if (automationError && !automationError.includes('claves de Cloudflare')) {
+                    alert(`La automatización devolvió un error: ${automationError}.\n\nSe abrirá tu gestor de correo para realizar la solicitud manualmente.`);
+                }
+
+                // Prepare mailto composition
+                const adminEmail = 'didac@thehashcode.org';
+                const subject = encodeURIComponent('[THC Labs] Solicitud de Alias de Correo @thehashcode.org');
+                const body = encodeURIComponent(
+                    `Hola Dídac,\n\n` +
+                    `Quiero solicitar la creación de un alias de correo electrónico redireccionado:\n` +
+                    `Alias solicitado: ${cleanAlias}@thehashcode.org\n` +
+                    `Redireccionar a mi correo personal: ${forward}\n\n` +
+                    `Quedo a la espera de la confirmación y el correo automático de verificación para activarlo.\n\n` +
+                    `¡Muchas gracias!`
                 );
-                
-                // Clear fields
-                aliasInput.value = '';
-                forwardInput.value = '';
-                btnSubmit.disabled = false;
-                btnSubmit.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Enviar Solicitud y Notificar 🔥';
-            }, 1000);
+
+                // Open mail client
+                window.location.href = `mailto:${adminEmail}?subject=${subject}&body=${body}`;
+
+                // Success Alert popup for manual flow
+                setTimeout(() => {
+                    alert(
+                        `¡Solicitud registrada!\n\n` +
+                        `Se ha guardado tu solicitud para crear el alias "${cleanAlias}@thehashcode.org" apuntando a "${forward}".\n\n` +
+                        `IMPORTANTE: Recuerda que es muy probable que tengas que activar tu dirección una vez configurado el alias mediante un enlace de verificación automático que recibirás en tu buzón de correo.`
+                    );
+                    
+                    // Clear fields
+                    aliasInput.value = '';
+                    forwardInput.value = '';
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Enviar Solicitud y Notificar 🔥';
+                }, 1000);
+            }
         });
     }
 
