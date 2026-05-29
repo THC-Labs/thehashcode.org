@@ -25,7 +25,8 @@ document.addEventListener('DOMContentLoaded', () => {
         previewOffset: {
             left: -Math.floor(Math.random() * (512 - 220)),
             top: -Math.floor(Math.random() * (512 - 220))
-        }
+        },
+        soundEnabled: true
     };
 
     // --- SUPABASE CLIENT INITIALIZATION ---
@@ -144,6 +145,10 @@ document.addEventListener('DOMContentLoaded', () => {
         initPixelCanvas();
         setupEventListeners();
 
+        // Premium features: audio player & background particles
+        initMusicPlayer();
+        initParticleSystem();
+
         // Start Sync / Polling Loops (CORS discord & Supabase)
         setInterval(fetchChatMessages, 4000);   // Chat polls every 4s
         setInterval(fetchPixelBoard, 5000);     // Pixel Canvas polls every 5s
@@ -217,6 +222,9 @@ document.addEventListener('DOMContentLoaded', () => {
             card.href = app.url;
             card.target = '_blank';
             card.className = `app-card card-${app.color}`;
+            
+            // App card hover sound
+            card.addEventListener('mouseenter', playHoverSound);
             
             // Allow deletion only for custom added apps
             const isDefault = app.url.includes('games.thehashcode.org') || app.url.includes('despensia.thehashcode.org');
@@ -355,6 +363,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Render only if new messages are detected
                 if (JSON.stringify(messages) !== JSON.stringify(state.chatMessages)) {
+                    // Play chime sound only if this is not the initial load and it's a new message
+                    if (state.chatMessages.length > 0) {
+                        playChimeSound();
+                    }
                     state.chatMessages = messages;
                     renderChat();
                 }
@@ -409,8 +421,34 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function sendChatMessage() {
-        const text = chatInput.value.trim();
+        let text = chatInput.value.trim();
         if (!text) return;
+
+        // CHAT COMMANDS PARSER
+        if (text.startsWith('/')) {
+            const command = text.split(' ')[0].toLowerCase();
+            const args = text.substring(command.length).trim();
+            
+            if (command === '/dado') {
+                const roll = Math.floor(Math.random() * 6) + 1;
+                text = `🎲 ha tirado un dado y le ha salido un *${roll}*.`;
+            } else if (command === '/moneda') {
+                const coin = Math.random() > 0.5 ? 'CARA' : 'CRUZ';
+                text = `🪙 ha lanzado una moneda y ha salido *${coin}*.`;
+            } else if (command === '/troll') {
+                const target = args || 'alguien';
+                const trolls = [
+                    "diciendo que juega con el monitor apagado.",
+                    "diciendo que le da miedo jugar clasificatorias.",
+                    "recordándole la vez que se cayó en la lava en Minecraft.",
+                    "diciendo que huele a queso rancio.",
+                    "diciendo que es el carry del grupo (pero al revés).",
+                    "afirmando que todavía no sabe cómo se recarga en CS2."
+                ];
+                const randomTroll = trolls[Math.floor(Math.random() * trolls.length)];
+                text = `🤪 ha troleado a **${target}** ${randomTroll}`;
+            }
+        }
 
         if (state.isSupabaseReal) {
             try {
@@ -618,6 +656,9 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (state.canvasPixels[index] !== drawColor) {
                 state.canvasPixels[index] = drawColor;
+                
+                // Play pop sound
+                playPopSound();
                 
                 // Update local storage
                 localStorage.setItem('thc_pixel_canvas', JSON.stringify(state.canvasPixels));
@@ -1004,6 +1045,218 @@ document.addEventListener('DOMContentLoaded', () => {
             link.href = image;
             link.click();
         });
+
+        // Sound toggle trigger
+        const btnSoundToggle = document.getElementById('btn-sound-toggle');
+        if (btnSoundToggle) {
+            btnSoundToggle.addEventListener('click', () => {
+                state.soundEnabled = !state.soundEnabled;
+                btnSoundToggle.innerHTML = state.soundEnabled 
+                    ? '<i class="fa-solid fa-volume-high"></i>' 
+                    : '<i class="fa-solid fa-volume-xmark"></i>';
+                btnSoundToggle.title = state.soundEnabled ? 'Silenciar Sonidos' : 'Activar Sonidos';
+                playChimeSound(); // Play chime to confirm
+            });
+        }
+        
+        // Add hover sounds to buttons
+        const addHoverListeners = () => {
+            document.querySelectorAll('.btn, .tab-btn, .social-btn, .tool-btn, .player-btn, .btn-icon, .btn-icon-green, .modal-close, .app-card').forEach(el => {
+                el.removeEventListener('mouseenter', playHoverSound);
+                el.addEventListener('mouseenter', playHoverSound);
+            });
+        };
+        addHoverListeners();
+        // Re-apply when DOM changes
+        const observer = new MutationObserver(addHoverListeners);
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    // --- SYNTHESIZED SOUND EFFECTS (Web Audio API) ---
+    function playPopSound() {
+        if (!state.soundEnabled) return;
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(120, audioCtx.currentTime); 
+            osc.frequency.exponentialRampToValueAtTime(320, audioCtx.currentTime + 0.08); 
+            
+            gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08); 
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.08);
+        } catch(e) {}
+    }
+
+    function playChimeSound() {
+        if (!state.soundEnabled) return;
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const now = audioCtx.currentTime;
+            
+            const playNote = (freq, start, duration) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                
+                osc.type = 'triangle';
+                osc.frequency.value = freq;
+                
+                gain.gain.setValueAtTime(0.05, start);
+                gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                osc.start(start);
+                osc.stop(start + duration);
+            };
+            
+            playNote(523.25, now, 0.12); // C5
+            playNote(659.25, now + 0.08, 0.2); // E5
+        } catch(e) {}
+    }
+
+    function playHoverSound() {
+        if (!state.soundEnabled) return;
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(500, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(700, audioCtx.currentTime + 0.03);
+            
+            gain.gain.setValueAtTime(0.004, audioCtx.currentTime); 
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.03);
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.03);
+        } catch(e) {}
+    }
+
+    // --- BACKGROUND PARTICLE SYSTEM (Leaves, Sparks, Butts) ---
+    function initParticleSystem() {
+        const container = document.createElement('div');
+        container.className = 'particle-container';
+        document.body.appendChild(container);
+
+        // Spawn particles periodically
+        setInterval(() => {
+            const activeParticles = container.querySelectorAll('.particle');
+            if (activeParticles.length >= 60) return; // safeguard performance
+
+            const particle = document.createElement('div');
+            particle.className = 'particle';
+
+            // Decide particle type: 50% leaf, 35% spark, 15% butt (colilla)
+            const rand = Math.random();
+            if (rand < 0.5) {
+                particle.classList.add('leaf');
+                // Random leaf parameters
+                const size = 6 + Math.random() * 12; // 6px to 18px
+                particle.style.width = `${size}px`;
+                particle.style.height = `${size}px`;
+                particle.style.left = `${Math.random() * 100}vw`;
+                particle.style.top = `-25px`;
+                
+                const speed = 6 + Math.random() * 10; // 6s to 16s
+                particle.style.animationDuration = `${speed}s`;
+                
+                const driftMid = 20 + Math.random() * 60;
+                const driftEnd = 40 + Math.random() * 100;
+                particle.style.setProperty('--drift-mid', `${driftMid}px`);
+                particle.style.setProperty('--drift-end', `${driftEnd}px`);
+            } else if (rand < 0.85) {
+                particle.classList.add('spark');
+                // Random spark parameters (sparks rise from bottom)
+                const size = 2 + Math.random() * 4; // 2px to 6px
+                particle.style.width = `${size}px`;
+                particle.style.height = `${size}px`;
+                particle.style.left = `${Math.random() * 100}vw`;
+                particle.style.top = `102vh`;
+                
+                const speed = 4 + Math.random() * 6; // 4s to 10s
+                particle.style.animationDuration = `${speed}s`;
+                
+                const driftMid = -30 + Math.random() * 60;
+                const driftEnd = -50 + Math.random() * 100;
+                particle.style.setProperty('--drift-mid', `${driftMid}px`);
+                particle.style.setProperty('--drift-end', `${driftEnd}px`);
+            } else {
+                particle.classList.add('butt');
+                // Joint butt (colilla tip) falls from top
+                particle.style.left = `${Math.random() * 100}vw`;
+                particle.style.top = `-25px`;
+                
+                const speed = 8 + Math.random() * 9; // 8s to 17s
+                particle.style.animationDuration = `${speed}s`;
+                
+                const driftMid = 10 + Math.random() * 40;
+                const driftEnd = 20 + Math.random() * 80;
+                particle.style.setProperty('--drift-mid', `${driftMid}px`);
+                particle.style.setProperty('--drift-end', `${driftEnd}px`);
+            }
+
+            container.appendChild(particle);
+
+            // Clean up particle DOM node after animation finishes
+            const animDuration = parseFloat(particle.style.animationDuration) * 1000;
+            setTimeout(() => {
+                particle.remove();
+            }, animDuration + 100);
+
+        }, 350);
+    }
+
+    // --- LOFI AUDIO PLAYER ---
+    function initMusicPlayer() {
+        const playBtn = document.getElementById('btn-music-play');
+        const waveVis = document.getElementById('wave-vis');
+        const audio = document.getElementById('lofi-audio');
+        const volSlider = document.getElementById('music-volume');
+
+        if (!playBtn || !audio) return;
+
+        // Set volume
+        audio.volume = volSlider ? volSlider.value : 0.4;
+
+        playBtn.addEventListener('click', () => {
+            if (audio.paused) {
+                // Play audio stream
+                audio.play()
+                    .then(() => {
+                        playBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+                        playBtn.classList.add('active');
+                        if (waveVis) waveVis.classList.add('playing');
+                    })
+                    .catch(err => {
+                        console.error('Audio play blocked or stream down:', err);
+                        alert('Error al reproducir el streaming. Inténtalo de nuevo.');
+                    });
+            } else {
+                audio.pause();
+                playBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
+                playBtn.classList.remove('active');
+                if (waveVis) waveVis.classList.remove('playing');
+            }
+        });
+
+        if (volSlider) {
+            volSlider.addEventListener('input', (e) => {
+                audio.volume = e.target.value;
+            });
+        }
     }
 
     // --- UTILS ---

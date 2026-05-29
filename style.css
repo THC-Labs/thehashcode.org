@@ -1610,3 +1610,205 @@ input:checked + .slider:before {
     }
 }
 
+/* Sound Toggle Button */
+.sound-toggle-btn {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 8px;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+    transition: var(--transition-smooth);
+}
+
+.sound-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--green-neon);
+    border-color: var(--green-primary);
+    box-shadow: 0 0 10px rgba(112, 224, 0, 0.2);
+}
+
+/* Dynamic Particle System (Leaves, Sparks, Joint Butts) */
+.particle-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: -1;
+    overflow: hidden;
+}
+
+.particle {
+    position: absolute;
+    pointer-events: none;
+    user-select: none;
+    will-change: transform, opacity;
+}
+
+/* Forest green leaves falling down */
+.particle.leaf {
+    background-color: var(--green-primary);
+    opacity: 0.12;
+    border-radius: 0 100% 0 100%;
+    transform-origin: center;
+    animation: fallAndWobble linear forwards;
+}
+
+/* Campfire sparks rising up */
+.particle.spark {
+    background-color: #f97316;
+    border-radius: 50%;
+    opacity: 0.45;
+    box-shadow: 0 0 6px #f97316, 0 0 12px #f59e0b;
+    animation: floatUpAndFade linear forwards;
+}
+
+/* Floating joint filters / colillas falling down */
+.particle.butt {
+    background: linear-gradient(180deg, #e5d5be 70%, #d97706 70%); /* Paper color + filter tip */
+    border: 0.5px solid rgba(0, 0, 0, 0.15);
+    width: 3.5px;
+    height: 12px;
+    opacity: 0.15;
+    border-radius: 1px;
+    animation: fallAndWobble linear forwards;
+}
+
+@keyframes fallAndWobble {
+    0% {
+        transform: translateY(-20px) rotate(0deg) translateX(0);
+    }
+    50% {
+        transform: translateY(50vh) rotate(180deg) translateX(var(--drift-mid, 15px));
+    }
+    100% {
+        transform: translateY(105vh) rotate(360deg) translateX(var(--drift-end, 30px));
+    }
+}
+
+@keyframes floatUpAndFade {
+    0% {
+        transform: translateY(105vh) translateX(0) scale(1);
+        opacity: 0.6;
+    }
+    50% {
+        transform: translateY(50vh) translateX(var(--drift-mid, -20px)) scale(0.6);
+        opacity: 0.4;
+    }
+    100% {
+        transform: translateY(-50px) translateX(var(--drift-end, -40px)) scale(0.1);
+        opacity: 0;
+    }
+}
+
+/* Music Player Widget */
+.music-widget {
+    border-color: var(--glass-border-green) !important;
+}
+
+.player-content {
+    padding: 0.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.track-info {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+}
+
+.track-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--green-neon);
+    font-family: var(--font-heading);
+    letter-spacing: 0.5px;
+}
+
+.track-artist {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+}
+
+.audio-controls-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    margin-top: 0.2rem;
+}
+
+.player-btn {
+    background: var(--green-muted);
+    border: 1px solid var(--green-primary);
+    color: var(--green-neon);
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 0.75rem;
+    transition: var(--transition-smooth);
+    box-shadow: 0 0 5px rgba(112, 224, 0, 0.1);
+}
+
+.player-btn:hover, .player-btn.active {
+    background: var(--green-primary);
+    color: var(--bg-dark);
+    box-shadow: 0 0 10px var(--green-neon);
+}
+
+.wave-visualizer {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 18px;
+    width: 48px;
+    margin: 0 0.2rem;
+}
+
+.wave-visualizer .bar {
+    width: 4px;
+    height: 3px;
+    background-color: var(--green-neon);
+    border-radius: 1px;
+    transition: height 0.15s ease;
+}
+
+.wave-visualizer.playing .bar {
+    animation: bounceWave 0.8s ease infinite alternate;
+}
+
+.wave-visualizer.playing .bar:nth-child(2) { animation-delay: 0.15s; }
+.wave-visualizer.playing .bar:nth-child(3) { animation-delay: 0.3s; }
+.wave-visualizer.playing .bar:nth-child(4) { animation-delay: 0.05s; }
+.wave-visualizer.playing .bar:nth-child(5) { animation-delay: 0.2s; }
+
+@keyframes bounceWave {
+    0% { height: 3px; }
+    100% { height: 18px; }
+}
+
+#music-volume {
+    flex-grow: 1;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    outline: none;
+    accent-color: var(--green-neon);
+    cursor: pointer;
+}
+
+

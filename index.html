@@ -57,6 +57,9 @@
         </div>
 
         <div class="header-socials">
+            <button class="sound-toggle-btn" id="btn-sound-toggle" title="Silenciar Sonidos">
+                <i class="fa-solid fa-volume-high"></i>
+            </button>
             <a href="https://discord.gg/your-invite" target="_blank" class="social-btn discord-btn" id="discord-header-link" title="Entrar a Discord">
                 <i class="fa-brands fa-discord"></i>
                 <span>Discord</span>
@@ -123,6 +126,31 @@
                         <div class="stat-progress-bar">
                             <div class="progress-fill fill-green" style="width: 100%;"></div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Lofi Music Player Widget -->
+                <div class="glass-panel music-widget spacer-top">
+                    <div class="panel-header">
+                        <h3><i class="fa-solid fa-radio panel-icon"></i> THC Radio</h3>
+                    </div>
+                    <div class="panel-content player-content">
+                        <div class="track-info">
+                            <span class="track-title">Lofi Chill Beats</span>
+                            <span class="track-artist">Live Streaming</span>
+                        </div>
+                        <div class="audio-controls-row">
+                            <button class="player-btn" id="btn-music-play" title="Reproducir"><i class="fa-solid fa-play"></i></button>
+                            <div class="wave-visualizer" id="wave-vis">
+                                <span class="bar"></span>
+                                <span class="bar"></span>
+                                <span class="bar"></span>
+                                <span class="bar"></span>
+                                <span class="bar"></span>
+                            </div>
+                            <input type="range" id="music-volume" min="0" max="1" step="0.1" value="0.4" title="Volumen">
+                        </div>
+                        <audio id="lofi-audio" crossorigin="anonymous" src="https://streams.ilovemusic.de/iloveradio17.mp3"></audio>
                     </div>
                 </div>
             </aside>
