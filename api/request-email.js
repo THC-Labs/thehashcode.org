@@ -108,7 +108,9 @@ module.exports = async (req, res) => {
 
         return res.status(200).json({ 
             success: true, 
-            message: 'Alias creado y configurado en Cloudflare.' 
+            message: 'Alias creado y configurado en Cloudflare.',
+            addressData: addressData,
+            ruleData: ruleData
         });
 
     } catch (error) {
