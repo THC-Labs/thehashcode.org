@@ -1,0 +1,11 @@
+{
+  "name": "the-hash-code",
+  "version": "1.0.0",
+  "description": "THC Labs Hub Portal",
+  "main": "index.html",
+  "scripts": {
+    "build": "node generate-config.js",
+    "start": "node generate-config.js"
+  },
+  "dependencies": {}
+}

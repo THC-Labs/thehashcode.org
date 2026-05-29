@@ -1,4 +1,4 @@
-// THC Labs Hub - Core Logic
+// THC Labs Hub - Dynamic Supabase & Real Discord Sync Engine
 
 document.addEventListener('DOMContentLoaded', () => {
     // --- STATE MANAGEMENT ---
@@ -13,21 +13,46 @@ document.addEventListener('DOMContentLoaded', () => {
         pixelColors: [
             '#38b000', '#70e000', '#007200', '#1b4314', // Greens
             '#8b5a2b', '#3d2511', '#b07d4f', '#d4a373', // Browns/Gold
-            '#ef4444', '#3b82f6', '#ffffff', '#000000'  // System
+            '#ef4444', '#3b82f6', '#ffffff', '#000000'  // System colors
         ],
         selectedPixelColor: '#70e000',
-        activeTool: 'draw', // 'draw' or 'erase'
+        activeTool: 'draw', 
         showPixelGrid: true,
-        canvasPixels: [], // 32x32 color grid
-        onlineFriends: [
-            { id: 1, name: 'SlayerCode', status: 'online', game: 'Valorant', avatar: '#38b000' },
-            { id: 2, name: 'WeedWizard', status: 'idle', game: 'Minecraft', avatar: '#d4a373' },
-            { id: 3, name: 'HexGamer', status: 'online', game: 'Counter-Strike 2', avatar: '#b07d4f' },
-            { id: 4, name: 'NikoBellic', status: 'dnd', game: 'GTA V', avatar: '#ef4444' },
-            { id: 5, name: 'MarihuanaMix', status: 'online', game: 'Spotify', avatar: '#70e000' }
-        ],
-        vcUsers: ['SlayerCode', 'HexGamer']
+        canvasPixels: [], // 32x32 color grid (1024 strings)
+        discordGuildId: '',
+        isDiscordReal: false,
+        isSupabaseReal: false
     };
+
+    // --- SUPABASE CLIENT INITIALIZATION ---
+    let supabase = null;
+    const dbStatusLabel = document.getElementById('db-status');
+    const dbStatusDot = document.querySelector('.status-dot');
+
+    if (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.url && window.SUPABASE_CONFIG.key) {
+        try {
+            supabase = window.supabase.createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.key);
+            state.isSupabaseReal = true;
+            dbStatusLabel.textContent = 'SUPABASE CLOUD';
+            dbStatusDot.classList.add('online');
+            console.log('Successfully connected to Supabase Database client.');
+        } catch (err) {
+            console.error('Failed to initialize Supabase client:', err);
+            fallbackToLocalDatabase();
+        }
+    } else {
+        fallbackToLocalDatabase();
+    }
+
+    function fallbackToLocalDatabase() {
+        state.isSupabaseReal = false;
+        dbStatusLabel.textContent = 'LOCAL SANDBOX';
+        if (dbStatusDot) {
+            dbStatusDot.style.backgroundColor = '#fbbf24';
+            dbStatusDot.style.boxShadow = '0 0 8px #fbbf24';
+        }
+        console.warn('Supabase URL/Key not found in window.SUPABASE_CONFIG. Falling back to browser LocalStorage.');
+    }
 
     // --- DOM ELEMENTS ---
     const digitalClock = document.getElementById('digital-clock');
@@ -35,10 +60,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const discordUsers = document.getElementById('discord-users');
     const vcUsersList = document.getElementById('vc-users-list');
     const onlineCounter = document.getElementById('online-counter');
+    const vcChannelName = document.getElementById('vc-channel-name');
+    const vcChannelPanel = document.getElementById('vc-channel-panel');
+    const discordHeaderLink = document.getElementById('discord-header-link');
     
-    // Pixel Canvas Elements
+    // Pixel Canvas Elements (Full board)
     const pixelCanvas = document.getElementById('pixel-canvas');
     const ctx = pixelCanvas.getContext('2d');
+    
+    // Pixel Canvas Elements (Dashboard Preview board)
+    const pixelCanvasPreview = document.getElementById('pixel-canvas-preview');
+    const ctxPreview = pixelCanvasPreview.getContext('2d');
+
     const pixelColorsPalette = document.getElementById('pixel-colors');
     const customColorInput = document.getElementById('custom-color');
     const toolDrawBtn = document.getElementById('tool-draw');
@@ -46,8 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const toolGridToggleBtn = document.getElementById('tool-grid-toggle');
     const btnClearCanvas = document.getElementById('btn-clear-canvas');
     const btnDownloadCanvas = document.getElementById('btn-download-canvas');
-    const syncSimulatorToggle = document.getElementById('sync-simulator-toggle');
-    const liveUsersDrawing = document.getElementById('live-users-drawing');
+    const liveDbSyncStatus = document.getElementById('live-db-sync-status');
 
     // Chat Elements
     const chatMessagesContainer = document.getElementById('chat-messages-container');
@@ -74,21 +106,45 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCancelApp = document.getElementById('btn-cancel-app');
     const btnSaveApp = document.getElementById('btn-save-app');
 
+    // Discord Settings Elements
+    const discordSettingsBtn = document.getElementById('discord-settings-btn');
+    const modalDiscord = document.getElementById('modal-discord');
+    const modalDiscordClose = document.getElementById('modal-discord-close');
+    const btnCancelDiscord = document.getElementById('btn-cancel-discord');
+    const btnSaveDiscord = document.getElementById('btn-save-discord');
+    const discordGuildIdInput = document.getElementById('discord-guild-id');
+
+    // Tab Navigation Elements
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    const tabViews = document.querySelectorAll('.tab-view');
+    const btnGoToPixelTab = document.getElementById('btn-go-to-pixel-tab');
+    const btnBackToDashboard = document.getElementById('btn-back-to-dashboard');
+
     // --- INITIALIZATION ---
     function init() {
         updateClock();
         setInterval(updateClock, 1000);
 
-        loadStorageData();
+        loadDiscordConfiguration();
+        loadLocalAppSubdomains();
         renderApps();
-        renderEvents();
-        renderDiscordStatus();
         renderChatProfileSelector();
-        renderChat();
-        
+
+        // Initial Data Fetch
+        fetchChatMessages();
+        fetchGamingEvents();
+        fetchPixelBoard();
+        fetchRealDiscordWidget();
+
+        // Setup drawing palettes
         initPixelCanvas();
         setupEventListeners();
-        simulateRealtimeActivities();
+
+        // Start Sync / Polling Loops (CORS discord & Supabase)
+        setInterval(fetchChatMessages, 4000);   // Chat polls every 4s
+        setInterval(fetchPixelBoard, 5000);     // Pixel Canvas polls every 5s
+        setInterval(fetchGamingEvents, 8000);   // Events poll every 8s
+        setInterval(fetchRealDiscordWidget, 15000); // Discord widget polls every 15s
     }
 
     // --- DIGITAL CLOCK ---
@@ -98,67 +154,58 @@ document.addEventListener('DOMContentLoaded', () => {
         digitalClock.textContent = timeStr;
     }
 
-    // --- LOCAL STORAGE DATA LOADER ---
-    function loadStorageData() {
-        // Load Apps
+    // --- TAB SWITCHER ---
+    function switchTab(targetTabId) {
+        tabButtons.forEach(btn => {
+            const isActive = btn.getAttribute('data-tab') === targetTabId;
+            btn.classList.toggle('active', isActive);
+        });
+
+        tabViews.forEach(view => {
+            const isTarget = view.id === targetTabId;
+            view.classList.toggle('hidden', !isTarget);
+            view.classList.toggle('active', isTarget);
+        });
+
+        // Trigger canvas redraw when entering drawing tab
+        if (targetTabId === 'pixel-art-view') {
+            setTimeout(drawPixelBoard, 50);
+        }
+    }
+
+    // --- LOCAL STORAGE WIDGET CONFIGS ---
+    function loadDiscordConfiguration() {
+        // Load Discord Guild ID
+        const storedGuildId = localStorage.getItem('thc_discord_guild_id');
+        if (storedGuildId) {
+            state.discordGuildId = storedGuildId;
+        } else if (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.discordGuildId) {
+            state.discordGuildId = window.SUPABASE_CONFIG.discordGuildId;
+        }
+        discordGuildIdInput.value = state.discordGuildId;
+    }
+
+    function loadLocalAppSubdomains() {
         const storedApps = localStorage.getItem('thc_apps');
         if (storedApps) {
             state.apps = JSON.parse(storedApps);
         } else {
-            // Default Apps
+            // Default real apps
             state.apps = [
-                { id: 1, name: 'Plex Media', url: 'https://plex.thehashcode.org', desc: 'Servidor de películas, series y streaming para el grupo.', icon: 'fa-film', color: 'brown' },
-                { id: 2, name: 'Game Stats', url: 'https://stats.thehashcode.org', desc: 'Estadísticas acumuladas de nuestras partidas en CS2, Valorant y Lol.', icon: 'fa-chart-simple', color: 'green' },
-                { id: 3, name: 'Minecraft Server', url: 'https://mc.thehashcode.org', desc: 'Estado del servidor de Minecraft Survival Técnico.', icon: 'fa-gamepad', color: 'gold' },
-                { id: 4, name: 'Admin Console', url: 'https://cloud.thehashcode.org', desc: 'Acceso a archivos compartidos, base de datos y despliegues.', icon: 'fa-terminal', color: 'green' }
+                { id: 1, name: 'THC Games Hub', url: 'https://games.thehashcode.org', desc: 'Zona de ocio y videojuegos retro del grupo.', icon: 'fa-gamepad', color: 'green' },
+                { id: 2, name: 'Despensia Portal', url: 'https://despensia.thehashcode.org', desc: 'Gestor compartido de despensa e inventario de cocina.', icon: 'fa-cart-shopping', color: 'brown' }
             ];
             localStorage.setItem('thc_apps', JSON.stringify(state.apps));
         }
 
-        // Load Events
-        const storedEvents = localStorage.getItem('thc_events');
-        if (storedEvents) {
-            state.events = JSON.parse(storedEvents);
-        } else {
-            // Default Events
-            state.events = [
-                { id: 1, title: 'Noche de Minecraft Técnico', date: new Date(Date.now() + 86400000 * 2).toISOString().substring(0, 16), platform: 'Discord (Sala General)', desc: 'Reunión para planificar la granja de oro masiva y repartir recursos.' },
-                { id: 2, title: 'Torneo de 1v1 CS2', date: new Date(Date.now() + 86400000 * 5).toISOString().substring(0, 16), platform: 'Servidor de Práctica THC', desc: 'Premio para el ganador: Rango especial y un Kebab pagado por el clan.' }
-            ];
-            localStorage.setItem('thc_events', JSON.stringify(state.events));
-        }
-
-        // Load Chat Profile
+        // Load profile settings
         const storedProfile = localStorage.getItem('thc_chat_profile');
         if (storedProfile) {
             state.chatProfile = JSON.parse(storedProfile);
         }
-
-        // Load Chat Messages
-        const storedChat = localStorage.getItem('thc_chat_messages');
-        if (storedChat) {
-            state.chatMessages = JSON.parse(storedChat);
-        } else {
-            state.chatMessages = [
-                { user: 'SlayerCode', color: '#ffb703', msg: 'ey chavales, esta tarde echamos unas partidas no?', time: '20:30' },
-                { user: 'WeedWizard', color: '#38b000', msg: 'de una, yo me meto al Minecraft en un rato a picar', time: '20:32' },
-                { user: 'HexGamer', color: '#b07d4f', msg: 'Yo a las 21:00 estoy listo para el CS2, montamos lobby de 5', time: '20:33' }
-            ];
-            localStorage.setItem('thc_chat_messages', JSON.stringify(state.chatMessages));
-        }
-
-        // Load Pixel Canvas state
-        const storedCanvas = localStorage.getItem('thc_pixel_canvas');
-        if (storedCanvas) {
-            state.canvasPixels = JSON.parse(storedCanvas);
-        } else {
-            // Initialize 32x32 grid with transparent/black color (#000000)
-            state.canvasPixels = new Array(32 * 32).fill('#000000');
-            localStorage.setItem('thc_pixel_canvas', JSON.stringify(state.canvasPixels));
-        }
     }
 
-    // --- RENDER DYNAMIC SUBDOMAINS/APPS ---
+    // --- APPS GRID CONTROLLER ---
     function renderApps() {
         appsContainer.innerHTML = '';
         state.apps.forEach(app => {
@@ -167,8 +214,8 @@ document.addEventListener('DOMContentLoaded', () => {
             card.target = '_blank';
             card.className = `app-card card-${app.color}`;
             
-            // Check if app is custom to add a delete button
-            const isDefault = app.id === 1 || app.id === 2 || app.id === 3 || app.id === 4;
+            // Allow deletion only for custom added apps
+            const isDefault = app.url.includes('games.thehashcode.org') || app.url.includes('despensia.thehashcode.org');
             const deleteBtnHtml = !isDefault ? `<button class="app-delete-btn" data-id="${app.id}"><i class="fa-solid fa-trash-can"></i></button>` : '';
 
             card.innerHTML = `
@@ -180,10 +227,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     <h4>${app.name}</h4>
                     <p>${app.desc}</p>
                 </div>
-                <span class="app-domain"><i class="fa-solid fa-link"></i> ${app.url.replace('https://', '')}</span>
+                <span class="app-domain"><i class="fa-solid fa-link"></i> ${app.url.replace('https://', '').replace('http://', '')}</span>
             `;
 
-            // Prevent event bubbling on delete button click
             const deleteBtn = card.querySelector('.app-delete-btn');
             if (deleteBtn) {
                 deleteBtn.addEventListener('click', (e) => {
@@ -203,94 +249,140 @@ document.addEventListener('DOMContentLoaded', () => {
         renderApps();
     }
 
-    // --- RENDER EVENTS CALENDAR ---
+    // --- DYNAMIC SUPABASE SYNC: EVENTS ---
+    async function fetchGamingEvents() {
+        if (state.isSupabaseReal) {
+            try {
+                const { data, error } = await supabase
+                    .from('gaming_events')
+                    .select('*');
+                if (error) throw error;
+                state.events = data || [];
+                renderEvents();
+            } catch (err) {
+                console.error('Supabase fetch gaming_events failed:', err);
+            }
+        } else {
+            // Local fallback
+            const localEvents = localStorage.getItem('thc_events');
+            state.events = localEvents ? JSON.parse(localEvents) : [];
+            renderEvents();
+        }
+    }
+
     function renderEvents() {
         eventsContainer.innerHTML = '';
         if (state.events.length === 0) {
-            eventsContainer.innerHTML = `<div class="event-card" style="border-left-color: var(--text-muted); text-align: center;"><p style="font-size: 0.8rem; color: var(--text-muted);">No hay eventos programados.</p></div>`;
+            eventsContainer.innerHTML = `
+                <div class="event-card" style="border-left-color: var(--text-muted); text-align: center; padding: 1.2rem;">
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0;">No hay quedadas programadas.</p>
+                </div>`;
             return;
         }
 
-        // Sort events by date
-        const sortedEvents = [...state.events].sort((a, b) => new Date(a.date) - new Date(b.date));
+        // Sort events chronologically
+        const sorted = [...state.events].sort((a, b) => new Date(a.event_date) - new Date(b.event_date));
 
-        sortedEvents.forEach(event => {
-            const dateObj = new Date(event.date);
-            const formattedDate = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+        sorted.forEach(ev => {
+            const dateObj = new Date(ev.event_date);
+            const formatted = dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
             
             const card = document.createElement('div');
             card.className = 'event-card';
             card.innerHTML = `
-                <button class="event-delete-btn" data-id="${event.id}"><i class="fa-solid fa-trash-can"></i></button>
+                <button class="event-delete-btn" data-id="${ev.id}"><i class="fa-solid fa-trash-can"></i></button>
                 <div class="event-card-header">
-                    <h4>${event.title}</h4>
-                    <span class="event-date-badge"><i class="fa-regular fa-clock"></i> ${formattedDate}</span>
+                    <h4>${ev.title}</h4>
+                    <span class="event-date-badge"><i class="fa-regular fa-clock"></i> ${formatted}</span>
                 </div>
-                <p class="event-meta">${event.desc}</p>
-                <span class="event-platform-tag"><i class="fa-solid fa-location-dot"></i> ${event.platform}</span>
+                <p class="event-meta">${ev.description || ''}</p>
+                <span class="event-platform-tag"><i class="fa-solid fa-location-dot"></i> ${ev.platform}</span>
             `;
 
-            const deleteBtn = card.querySelector('.event-delete-btn');
-            deleteBtn.addEventListener('click', () => {
-                deleteEvent(event.id);
+            card.querySelector('.event-delete-btn').addEventListener('click', () => {
+                deleteEvent(ev.id);
             });
 
             eventsContainer.appendChild(card);
         });
     }
 
-    function deleteEvent(id) {
-        state.events = state.events.filter(e => e.id !== id);
-        localStorage.setItem('thc_events', JSON.stringify(state.events));
-        renderEvents();
+    async function deleteEvent(id) {
+        if (state.isSupabaseReal) {
+            try {
+                const { error } = await supabase
+                    .from('gaming_events')
+                    .delete()
+                    .eq('id', id);
+                if (error) throw error;
+                fetchGamingEvents();
+            } catch (err) {
+                console.error('Supabase delete event error:', err);
+            }
+        } else {
+            state.events = state.events.filter(e => e.id !== id);
+            localStorage.setItem('thc_events', JSON.stringify(state.events));
+            renderEvents();
+        }
     }
 
-    // --- RENDER DISCORD / ONLINE WIDGET ---
-    function renderDiscordStatus() {
-        discordUsers.innerHTML = '';
-        state.onlineFriends.forEach(user => {
-            const item = document.createElement('li');
-            item.className = 'discord-user-card';
-            
-            let statusClass = 'online';
-            if (user.status === 'idle') statusClass = 'idle';
-            if (user.status === 'dnd') statusClass = 'dnd';
+    // --- DYNAMIC SUPABASE SYNC: CHAT ---
+    async function fetchChatMessages() {
+        if (state.isSupabaseReal) {
+            try {
+                const { data, error } = await supabase
+                    .from('chat_messages')
+                    .select('*')
+                    .order('created_at', { ascending: false })
+                    .limit(40);
+                if (error) throw error;
+                
+                // Supabase fetched messages are descending. Reverse them for chronological render
+                const messages = (data || []).reverse().map(m => {
+                    const d = new Date(m.created_at);
+                    const timeStr = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                    return {
+                        user: m.username,
+                        color: m.color,
+                        msg: m.message,
+                        time: timeStr
+                    };
+                });
 
-            item.innerHTML = `
-                <div class="avatar-wrapper">
-                    <div class="user-avatar" style="background-color: ${user.avatar}; width: 100%; height: 100%; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.8rem; color: #111;">
-                        ${user.name.substring(0, 2).toUpperCase()}
-                    </div>
-                    <span class="user-status-dot ${statusClass}"></span>
-                </div>
-                <div class="user-info">
-                    <span class="user-name">${user.name}</span>
-                    <span class="user-game">Jugando a <strong>${user.game}</strong></span>
-                </div>
-            `;
-            discordUsers.appendChild(item);
-        });
-
-        // Set online counter text
-        const onlineCount = state.onlineFriends.filter(f => f.status !== 'offline').length;
-        onlineCounter.textContent = `${onlineCount} online`;
-
-        // Render Voice Chat participants
-        vcUsersList.innerHTML = '';
-        state.vcUsers.forEach(username => {
-            const user = state.onlineFriends.find(f => f.name === username);
-            const color = user ? user.avatar : '#888';
-            const tag = document.createElement('div');
-            tag.className = 'vc-user-tag';
-            tag.innerHTML = `
-                <i class="fa-solid fa-microphone"></i>
-                <span style="font-weight: 500;">${username}</span>
-            `;
-            vcUsersList.appendChild(tag);
-        });
+                // Render only if new messages are detected
+                if (JSON.stringify(messages) !== JSON.stringify(state.chatMessages)) {
+                    state.chatMessages = messages;
+                    renderChat();
+                }
+            } catch (err) {
+                console.error('Supabase fetch chat failed:', err);
+            }
+        } else {
+            // Local fallback
+            const localChat = localStorage.getItem('thc_chat_messages');
+            state.chatMessages = localChat ? JSON.parse(localChat) : [];
+            renderChat();
+        }
     }
 
-    // --- COMMUNITY CHAT SYSTEM ---
+    function renderChat() {
+        chatMessagesContainer.innerHTML = '';
+        state.chatMessages.forEach(msg => {
+            const card = document.createElement('div');
+            const isSelf = msg.user === state.chatProfile.username;
+            card.className = `chat-message ${isSelf ? 'self' : ''}`;
+            card.innerHTML = `
+                <div class="msg-header">
+                    <span class="msg-username" style="color: ${msg.color}">${msg.user}</span>
+                    <span class="msg-time">${msg.time}</span>
+                </div>
+                <div class="msg-body">${escapeHtml(msg.msg)}</div>
+            `;
+            chatMessagesContainer.appendChild(card);
+        });
+        chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+    }
+
     function renderChatProfileSelector() {
         chatUsernameInput.value = state.chatProfile.username;
         chatColorSelector.innerHTML = '';
@@ -312,92 +404,96 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function renderChat() {
-        chatMessagesContainer.innerHTML = '';
-        state.chatMessages.forEach(msg => {
-            const card = document.createElement('div');
-            const isSelf = msg.user === state.chatProfile.username;
-            card.className = `chat-message ${isSelf ? 'self' : ''}`;
-            card.innerHTML = `
-                <div class="msg-header">
-                    <span class="msg-username" style="color: ${msg.color}">${msg.user}</span>
-                    <span class="msg-time">${msg.time}</span>
-                </div>
-                <div class="msg-body">${escapeHtml(msg.msg)}</div>
-            `;
-            chatMessagesContainer.appendChild(card);
-        });
-        chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
-    }
-
-    function sendMessage() {
+    async function sendChatMessage() {
         const text = chatInput.value.trim();
         if (!text) return;
 
-        const time = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-        const newMsg = {
-            user: state.chatProfile.username,
-            color: state.chatProfile.color,
-            msg: text,
-            time: time
-        };
-
-        state.chatMessages.push(newMsg);
-        // Limit chat to last 40 messages
-        if (state.chatMessages.length > 40) {
-            state.chatMessages.shift();
-        }
-        localStorage.setItem('thc_chat_messages', JSON.stringify(state.chatMessages));
-        renderChat();
-        chatInput.value = '';
-
-        // Trigger bot / dynamic simulated response
-        if (Math.random() > 0.3) {
-            setTimeout(simulateFriendResponse, 1500 + Math.random() * 2000);
+        if (state.isSupabaseReal) {
+            try {
+                const { error } = await supabase
+                    .from('chat_messages')
+                    .insert([{
+                        username: state.chatProfile.username,
+                        color: state.chatProfile.color,
+                        message: text
+                    }]);
+                if (error) throw error;
+                chatInput.value = '';
+                fetchChatMessages();
+            } catch (err) {
+                console.error('Supabase write chat failed:', err);
+            }
+        } else {
+            // Local fallback
+            const time = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+            const newMsg = {
+                user: state.chatProfile.username,
+                color: state.chatProfile.color,
+                msg: text,
+                time: time
+            };
+            state.chatMessages.push(newMsg);
+            if (state.chatMessages.length > 40) state.chatMessages.shift();
+            localStorage.setItem('thc_chat_messages', JSON.stringify(state.chatMessages));
+            renderChat();
+            chatInput.value = '';
         }
     }
 
-    function simulateFriendResponse() {
-        const friendsWhoCanReply = state.onlineFriends.filter(f => f.status === 'online');
-        if (friendsWhoCanReply.length === 0) return;
-        const randomFriend = friendsWhoCanReply[Math.floor(Math.random() * friendsWhoCanReply.length)];
-
-        const responses = [
-            "jajajaja brutal",
-            "yo me meto en 5 minutos",
-            "quién está online en discord?",
-            "pasa link",
-            "lolazo",
-            "esta noche sale party",
-            "hecho",
-            "vaya viciada colega",
-            "esperadme que estoy cenando",
-            "alguien para valorant hoy?",
-            "siiiii",
-            "buaa increíble"
-        ];
-
-        const text = responses[Math.floor(Math.random() * responses.length)];
-        const time = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-        const botMsg = {
-            user: randomFriend.name,
-            color: randomFriend.avatar,
-            msg: text,
-            time: time
-        };
-
-        state.chatMessages.push(botMsg);
-        localStorage.setItem('thc_chat_messages', JSON.stringify(state.chatMessages));
-        renderChat();
-    }
-
-    // --- INTERACTIVE PIXEL ART BOARD ---
-    const logicalGridSize = 32; // 32x32 cells
-    let canvasRect = null;
+    // --- DYNAMIC SUPABASE SYNC: PIXEL BOARD ---
+    const logicalGridSize = 32;
     let isDrawing = false;
+    let saveTimeout = null;
+
+    async function fetchPixelBoard() {
+        if (state.isSupabaseReal) {
+            try {
+                const { data, error } = await supabase
+                    .from('pixel_board')
+                    .select('*')
+                    .eq('id', 1)
+                    .single();
+                
+                if (error && error.code !== 'PGRST116') throw error; // ignore row-not-found errors
+
+                if (data && Array.isArray(data.pixels) && data.pixels.length === 1024) {
+                    if (JSON.stringify(data.pixels) !== JSON.stringify(state.canvasPixels)) {
+                        state.canvasPixels = data.pixels;
+                        drawPixelBoard();
+                        drawPixelPreview();
+                    }
+                } else if (!data) {
+                    // Create board if missing in cloud
+                    const emptyGrid = new Array(32 * 32).fill('#000000');
+                    await supabase.from('pixel_board').insert({ id: 1, pixels: emptyGrid });
+                    state.canvasPixels = emptyGrid;
+                    drawPixelBoard();
+                    drawPixelPreview();
+                }
+            } catch (err) {
+                console.error('Supabase fetch pixel board failed:', err);
+            }
+        } else {
+            // Local fallback
+            const localCanvas = localStorage.getItem('thc_pixel_canvas');
+            if (localCanvas) {
+                const parsed = JSON.parse(localCanvas);
+                if (JSON.stringify(parsed) !== JSON.stringify(state.canvasPixels)) {
+                    state.canvasPixels = parsed;
+                    drawPixelBoard();
+                    drawPixelPreview();
+                }
+            } else {
+                state.canvasPixels = new Array(32 * 32).fill('#000000');
+                localStorage.setItem('thc_pixel_canvas', JSON.stringify(state.canvasPixels));
+                drawPixelBoard();
+                drawPixelPreview();
+            }
+        }
+    }
 
     function initPixelCanvas() {
-        // Build palette indicators
+        // Build palette
         pixelColorsPalette.innerHTML = '';
         state.pixelColors.forEach(color => {
             const colorDiv = document.createElement('div');
@@ -416,7 +512,6 @@ document.addEventListener('DOMContentLoaded', () => {
             pixelColorsPalette.appendChild(colorDiv);
         });
 
-        // Add support for custom color changes
         customColorInput.addEventListener('input', (e) => {
             state.selectedPixelColor = e.target.value;
             document.querySelectorAll('.color-option').forEach(c => c.classList.remove('selected'));
@@ -424,24 +519,25 @@ document.addEventListener('DOMContentLoaded', () => {
             updateToolButtons();
         });
 
-        // Initialize size adjustments
         drawPixelBoard();
+        drawPixelPreview();
     }
 
+    // Render large full-screen canvas
     function drawPixelBoard() {
+        if (!pixelCanvas) return;
         const width = pixelCanvas.width;
         const height = pixelCanvas.height;
-        const cellSize = width / logicalGridSize; // 512 / 32 = 16px
+        const cellSize = width / logicalGridSize;
 
-        // Clear canvas
+        // Fill background
         ctx.fillStyle = '#020402';
         ctx.fillRect(0, 0, width, height);
 
-        // Draw Pixels
+        // Draw individual pixels
         for (let y = 0; y < logicalGridSize; y++) {
             for (let x = 0; x < logicalGridSize; x++) {
-                const index = y * logicalGridSize + x;
-                const color = state.canvasPixels[index];
+                const color = state.canvasPixels[y * logicalGridSize + x];
                 if (color && color !== '#000000') {
                     ctx.fillStyle = color;
                     ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
@@ -449,19 +545,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Draw Grid Lines if active
+        // Draw grid boundaries
         if (state.showPixelGrid) {
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
             ctx.lineWidth = 0.5;
-            
             for (let i = 0; i <= logicalGridSize; i++) {
-                // Vertical lines
                 ctx.beginPath();
                 ctx.moveTo(i * cellSize, 0);
                 ctx.lineTo(i * cellSize, height);
                 ctx.stroke();
 
-                // Horizontal lines
                 ctx.beginPath();
                 ctx.moveTo(0, i * cellSize);
                 ctx.lineTo(width, i * cellSize);
@@ -470,10 +563,30 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Render cropped/masked preview canvas on dashboard
+    function drawPixelPreview() {
+        if (!pixelCanvasPreview) return;
+        const width = pixelCanvasPreview.width;
+        const height = pixelCanvasPreview.height;
+        const cellSize = width / logicalGridSize; // 256 / 32 = 8px
+
+        ctxPreview.fillStyle = '#020402';
+        ctxPreview.fillRect(0, 0, width, height);
+
+        for (let y = 0; y < logicalGridSize; y++) {
+            for (let x = 0; x < logicalGridSize; x++) {
+                const color = state.canvasPixels[y * logicalGridSize + x];
+                if (color && color !== '#000000') {
+                    ctxPreview.fillStyle = color;
+                    ctxPreview.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+                }
+            }
+        }
+    }
+
     function paintPixelAtCoordinates(x, y) {
-        canvasRect = pixelCanvas.getBoundingClientRect();
+        const canvasRect = pixelCanvas.getBoundingClientRect();
         
-        // Calculate logical x, y positions (0 to 31)
         const scaleX = pixelCanvas.width / canvasRect.width;
         const scaleY = pixelCanvas.height / canvasRect.height;
         
@@ -483,17 +596,49 @@ document.addEventListener('DOMContentLoaded', () => {
         const cellX = Math.floor(canvasX / (pixelCanvas.width / logicalGridSize));
         const cellY = Math.floor(canvasY / (pixelCanvas.height / logicalGridSize));
 
-        // Boundary checks
         if (cellX >= 0 && cellX < logicalGridSize && cellY >= 0 && cellY < logicalGridSize) {
             const index = cellY * logicalGridSize + cellX;
             const drawColor = state.activeTool === 'draw' ? state.selectedPixelColor : '#000000';
             
             if (state.canvasPixels[index] !== drawColor) {
                 state.canvasPixels[index] = drawColor;
+                
+                // Update local storage
                 localStorage.setItem('thc_pixel_canvas', JSON.stringify(state.canvasPixels));
+                
+                // Draw frames
                 drawPixelBoard();
+                drawPixelPreview();
+
+                // Trigger Debounced save to Supabase
+                triggerDebouncedSave();
             }
         }
+    }
+
+    function triggerDebouncedSave() {
+        if (liveDbSyncStatus) {
+            liveDbSyncStatus.textContent = 'Guardando...';
+            liveDbSyncStatus.classList.add('text-green');
+        }
+
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(async () => {
+            if (state.isSupabaseReal) {
+                try {
+                    const { error } = await supabase
+                        .from('pixel_board')
+                        .upsert({ id: 1, pixels: state.canvasPixels });
+                    if (error) throw error;
+                } catch (err) {
+                    console.error('Supabase pixel board save failed:', err);
+                }
+            }
+            if (liveDbSyncStatus) {
+                liveDbSyncStatus.textContent = 'Sincronizado';
+                liveDbSyncStatus.classList.remove('text-green');
+            }
+        }, 1200); // Wait for 1.2 seconds of inactivity before writing to db
     }
 
     function updateToolButtons() {
@@ -501,13 +646,202 @@ document.addEventListener('DOMContentLoaded', () => {
         toolEraseBtn.classList.toggle('active', state.activeTool === 'erase');
     }
 
-    // --- EVENT LISTENERS REGISTRATION ---
+    // --- REAL DISCORD WIDGET INTEGRATION (CORS PROXY) ---
+    async function fetchRealDiscordWidget() {
+        if (!state.discordGuildId) {
+            renderSimulatedDiscord();
+            return;
+        }
+
+        try {
+            // Fetch Discord Widget JSON using corsproxy.io to bypass SOP/CORS restrictions
+            const url = `https://discord.com/api/guilds/${state.discordGuildId}/widget.json`;
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+            
+            const response = await fetch(proxyUrl);
+            if (!response.ok) throw new Error('Guild not found or widget disabled');
+            
+            const data = await response.json();
+            
+            state.isDiscordReal = true;
+            renderRealDiscord(data);
+        } catch (err) {
+            console.error('Discord API Widget query failed (falling back to simulation):', err);
+            renderSimulatedDiscord(true); // pass true to show config warning
+        }
+    }
+
+    function renderRealDiscord(data) {
+        // Set Header link to point to real invite if exists
+        if (data.instant_invite) {
+            discordHeaderLink.href = data.instant_invite;
+        }
+
+        // Render Online count
+        const members = data.members || [];
+        onlineCounter.textContent = `${members.length} online`;
+
+        // Render Members list
+        discordUsers.innerHTML = '';
+        if (members.length === 0) {
+            discordUsers.innerHTML = `<li style="font-size: 0.75rem; color: var(--text-muted); text-align: center; padding: 1rem;">Nadie conectado ahora mismo.</li>`;
+        } else {
+            members.forEach(member => {
+                const item = document.createElement('li');
+                item.className = 'discord-user-card';
+                
+                let statusClass = 'online';
+                if (member.status === 'idle') statusClass = 'idle';
+                if (member.status === 'dnd') statusClass = 'dnd';
+
+                const gameName = member.game ? member.game.name : null;
+                const gameText = gameName ? `Jugando a <strong>${gameName}</strong>` : `<span style="opacity: 0.5;">En línea</span>`;
+
+                const avatarSrc = member.avatar_url;
+                const avatarHtml = avatarSrc 
+                    ? `<img src="${avatarSrc}" class="user-avatar" alt="${member.username}">`
+                    : `<div class="user-avatar" style="background-color: var(--green-muted); width: 100%; height: 100%; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.8rem;">${member.username.substring(0, 2).toUpperCase()}</div>`;
+
+                item.innerHTML = `
+                    <div class="avatar-wrapper">
+                        ${avatarHtml}
+                        <span class="user-status-dot ${statusClass}"></span>
+                    </div>
+                    <div class="user-info">
+                        <span class="user-name">${member.username}</span>
+                        <span class="user-game">${gameText}</span>
+                    </div>
+                `;
+                discordUsers.appendChild(item);
+            });
+        }
+
+        // Render Voice Channels & Users
+        vcUsersList.innerHTML = '';
+        const voiceChannels = (data.channels || []).filter(c => c.name.toLowerCase().includes('general') || c.name.toLowerCase().includes('voz') || c.id);
+        
+        let usersInVoice = [];
+        let activeVcName = 'Sin canales activos';
+
+        // Find voice channels containing users
+        if (members.length > 0) {
+            // Find channels that have users inside
+            const channelsWithMembers = voiceChannels.filter(c => members.some(m => m.channel_id === c.id));
+            if (channelsWithMembers.length > 0) {
+                const activeChannel = channelsWithMembers[0];
+                activeVcName = activeChannel.name;
+                usersInVoice = members.filter(m => m.channel_id === activeChannel.id);
+            } else if (voiceChannels.length > 0) {
+                activeVcName = voiceChannels[0].name;
+            }
+        }
+
+        vcChannelName.innerHTML = `Canal de Voz: <strong>${activeVcName}</strong>`;
+
+        if (usersInVoice.length === 0) {
+            vcChannelPanel.style.display = 'none';
+        } else {
+            vcChannelPanel.style.display = 'block';
+            usersInVoice.forEach(member => {
+                const tag = document.createElement('div');
+                tag.className = 'vc-user-tag';
+                tag.innerHTML = `
+                    <i class="fa-solid fa-microphone"></i>
+                    <span style="font-weight: 500;">${member.username}</span>
+                `;
+                vcUsersList.appendChild(tag);
+            });
+        }
+    }
+
+    function renderSimulatedDiscord(showWarning = false) {
+        state.isDiscordReal = false;
+        
+        // Render online count
+        onlineCounter.textContent = `3 online`;
+
+        // Render simulated members
+        discordUsers.innerHTML = '';
+        
+        if (showWarning) {
+            const warnItem = document.createElement('li');
+            warnItem.style.fontSize = '0.7rem';
+            warnItem.style.color = 'var(--gold-primary)';
+            warnItem.style.backgroundColor = 'rgba(212, 163, 115, 0.08)';
+            warnItem.style.border = '1px solid rgba(212, 163, 115, 0.2)';
+            warnItem.style.padding = '0.4rem';
+            warnItem.style.borderRadius = '4px';
+            warnItem.style.marginBottom = '0.6rem';
+            warnItem.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ID Discord inválido o Widget inactivo. Ajusta la ID en la rueda dentada.`;
+            discordUsers.appendChild(warnItem);
+        }
+
+        const simulatedFriends = [
+            { name: 'SlayerCode', status: 'online', game: 'Valorant', avatar: '#38b000' },
+            { name: 'WeedWizard', status: 'idle', game: 'Minecraft', avatar: '#d4a373' },
+            { name: 'HexGamer', status: 'online', game: 'Counter-Strike 2', avatar: '#b07d4f' }
+        ];
+
+        simulatedFriends.forEach(user => {
+            const item = document.createElement('li');
+            item.className = 'discord-user-card';
+            
+            let statusClass = 'online';
+            if (user.status === 'idle') statusClass = 'idle';
+
+            item.innerHTML = `
+                <div class="avatar-wrapper">
+                    <div class="user-avatar" style="background-color: ${user.avatar}; width: 100%; height: 100%; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.8rem; color: #111;">
+                        ${user.name.substring(0, 2).toUpperCase()}
+                    </div>
+                    <span class="user-status-dot ${statusClass}"></span>
+                </div>
+                <div class="user-info">
+                    <span class="user-name">${user.name}</span>
+                    <span class="user-game">Jugando a <strong>${user.game}</strong></span>
+                </div>
+            `;
+            discordUsers.appendChild(item);
+        });
+
+        vcChannelPanel.style.display = 'block';
+        vcChannelName.innerHTML = `Canal de Voz: <strong>General (Demo)</strong>`;
+        
+        vcUsersList.innerHTML = '';
+        ['SlayerCode', 'HexGamer'].forEach(username => {
+            const tag = document.createElement('div');
+            tag.className = 'vc-user-tag';
+            tag.innerHTML = `
+                <i class="fa-solid fa-microphone"></i>
+                <span style="font-weight: 500;">${username}</span>
+            `;
+            vcUsersList.appendChild(tag);
+        });
+    }
+
+    // --- EVENT LISTENERS ---
     function setupEventListeners() {
-        // App Modal Triggers
+        // Tab navigations toggles
+        tabButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetTab = btn.getAttribute('data-tab');
+                switchTab(targetTab);
+            });
+        });
+
+        btnGoToPixelTab.addEventListener('click', () => {
+            switchTab('pixel-art-view');
+        });
+
+        btnBackToDashboard.addEventListener('click', () => {
+            switchTab('dashboard-view');
+        });
+
+        // App Modal triggers
         btnAddApp.addEventListener('click', () => modalApp.classList.remove('hidden'));
         modalAppClose.addEventListener('click', () => modalApp.classList.add('hidden'));
         btnCancelApp.addEventListener('click', () => modalApp.classList.add('hidden'));
-        
+
         btnSaveApp.addEventListener('click', () => {
             const name = document.getElementById('app-name').value.trim();
             const url = document.getElementById('app-url').value.trim();
@@ -534,16 +868,15 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem('thc_apps', JSON.stringify(state.apps));
             renderApps();
 
-            // Clear inputs & close modal
+            // Clear inputs
             document.getElementById('app-name').value = '';
             document.getElementById('app-url').value = '';
             document.getElementById('app-desc').value = '';
             modalApp.classList.add('hidden');
         });
 
-        // Event Modal Triggers
+        // Event Modal triggers
         btnAddEvent.addEventListener('click', () => {
-            // Set default date to tomorrow
             const tomorrow = new Date();
             tomorrow.setDate(tomorrow.getDate() + 1);
             tomorrow.setHours(21, 0, 0, 0);
@@ -553,37 +886,66 @@ document.addEventListener('DOMContentLoaded', () => {
         modalEventClose.addEventListener('click', () => modalEvent.classList.add('hidden'));
         btnCancelEvent.addEventListener('click', () => modalEvent.classList.add('hidden'));
 
-        btnSaveEvent.addEventListener('click', () => {
+        btnSaveEvent.addEventListener('click', async () => {
             const title = document.getElementById('event-title').value.trim();
             const date = document.getElementById('event-date').value;
             const platform = document.getElementById('event-platform').value.trim();
             const desc = document.getElementById('event-desc').value.trim();
 
             if (!title || !date || !platform) {
-                alert('Por favor, rellena los campos principales (Título, Fecha y Canal/Plataforma).');
+                alert('Rellena los campos obligatorios.');
                 return;
             }
 
-            const newEvent = {
-                id: Date.now(),
-                title: title,
-                date: date,
-                platform: platform,
-                desc: desc || 'Sin detalles adicionales.'
-            };
+            if (state.isSupabaseReal) {
+                try {
+                    const { error } = await supabase
+                        .from('gaming_events')
+                        .insert([{
+                            title: title,
+                            event_date: date,
+                            platform: platform,
+                            description: desc
+                        }]);
+                    if (error) throw error;
+                    fetchGamingEvents();
+                } catch (err) {
+                    console.error('Supabase write event failed:', err);
+                }
+            } else {
+                // Local fallback
+                const newEvent = {
+                    id: Date.now(),
+                    title: title,
+                    event_date: date,
+                    platform: platform,
+                    description: desc
+                };
+                state.events.push(newEvent);
+                localStorage.setItem('thc_events', JSON.stringify(state.events));
+                renderEvents();
+            }
 
-            state.events.push(newEvent);
-            localStorage.setItem('thc_events', JSON.stringify(state.events));
-            renderEvents();
-
-            // Clear inputs & close
             document.getElementById('event-title').value = '';
-            document.getElementById('event-desc').value = '';
             document.getElementById('event-platform').value = '';
+            document.getElementById('event-desc').value = '';
             modalEvent.classList.add('hidden');
         });
 
-        // Chat interactions
+        // Discord settings modal triggers
+        discordSettingsBtn.addEventListener('click', () => modalDiscord.classList.remove('hidden'));
+        modalDiscordClose.addEventListener('click', () => modalDiscord.classList.add('hidden'));
+        btnCancelDiscord.addEventListener('click', () => modalDiscord.classList.add('hidden'));
+        
+        btnSaveDiscord.addEventListener('click', () => {
+            const guildId = discordGuildIdInput.value.trim();
+            state.discordGuildId = guildId;
+            localStorage.setItem('thc_discord_guild_id', guildId);
+            modalDiscord.classList.add('hidden');
+            fetchRealDiscordWidget();
+        });
+
+        // Chat settings
         chatSettingsToggle.addEventListener('click', () => {
             chatConfigBar.classList.toggle('hidden');
         });
@@ -598,30 +960,26 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        btnSendMessage.addEventListener('click', sendMessage);
+        btnSendMessage.addEventListener('click', sendChatMessage);
         chatInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                sendMessage();
-            }
+            if (e.key === 'Enter') sendChatMessage();
         });
 
-        // Pixel board drawing mouse handlers
+        // Drawing mouse handlers
         pixelCanvas.addEventListener('mousedown', (e) => {
             isDrawing = true;
             paintPixelAtCoordinates(e.clientX, e.clientY);
         });
 
         window.addEventListener('mousemove', (e) => {
-            if (isDrawing) {
-                paintPixelAtCoordinates(e.clientX, e.clientY);
-            }
+            if (isDrawing) paintPixelAtCoordinates(e.clientX, e.clientY);
         });
 
         window.addEventListener('mouseup', () => {
             isDrawing = false;
         });
 
-        // Mobile touch support
+        // Touch handlers (mobile drawing)
         pixelCanvas.addEventListener('touchstart', (e) => {
             isDrawing = true;
             if (e.touches && e.touches[0]) {
@@ -641,7 +999,7 @@ document.addEventListener('DOMContentLoaded', () => {
             isDrawing = false;
         });
 
-        // Pixel actions
+        // Canvas toolbar triggers
         toolDrawBtn.addEventListener('click', () => {
             state.activeTool = 'draw';
             updateToolButtons();
@@ -659,16 +1017,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         btnClearCanvas.addEventListener('click', () => {
-            if (confirm('¿Seguro que quieres borrar toda la pizarra de píxeles?')) {
+            if (confirm('¿Seguro que quieres limpiar todo el mural de píxeles?')) {
                 state.canvasPixels = new Array(32 * 32).fill('#000000');
                 localStorage.setItem('thc_pixel_canvas', JSON.stringify(state.canvasPixels));
                 drawPixelBoard();
+                drawPixelPreview();
+                triggerDebouncedSave();
             }
         });
 
         btnDownloadCanvas.addEventListener('click', () => {
-            // Generate PNG download with upscale to 512x512
-            // Since we want to download without the grid lines, we draw it to a temporary upscaled canvas
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = 512;
             tempCanvas.height = 512;
@@ -696,66 +1054,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- SIMULATED LIVENESS / MULTIPLAYER AND DISCORD ---
-    function simulateRealtimeActivities() {
-        // 1. Simulates friends drawing random pixels
-        setInterval(() => {
-            if (!syncSimulatorToggle.checked) return;
-            
-            // 20% chance another user draws a pixel
-            if (Math.random() < 0.25) {
-                const randomCell = Math.floor(Math.random() * (logicalGridSize * logicalGridSize));
-                const randomColor = state.pixelColors[Math.floor(Math.random() * (state.pixelColors.length - 2))]; // avoid pure black/white
-                
-                state.canvasPixels[randomCell] = randomColor;
-                localStorage.setItem('thc_pixel_canvas', JSON.stringify(state.canvasPixels));
-                
-                // Temporarily flash drawing status
-                const friendsNames = state.onlineFriends.map(f => f.name);
-                const randomFriendName = friendsNames[Math.floor(Math.random() * friendsNames.length)];
-                liveUsersDrawing.textContent = `${randomFriendName} dibujando...`;
-                liveUsersDrawing.classList.add('text-green');
-                
-                drawPixelBoard();
-
-                setTimeout(() => {
-                    liveUsersDrawing.textContent = '2 dibujando';
-                    liveUsersDrawing.classList.remove('text-green');
-                }, 2000);
-            }
-        }, 6000);
-
-        // 2. Simulates Discord game states updating
-        setInterval(() => {
-            if (Math.random() < 0.3) {
-                // Change game of a random friend
-                const friendIndex = Math.floor(Math.random() * state.onlineFriends.length);
-                const games = ['Valorant', 'Minecraft', 'League of Legends', 'Counter-Strike 2', 'GTA V', 'Apex Legends', 'Among Us', 'Cyberpunk 2077', 'Spotify', 'Visual Studio Code'];
-                const randomGame = games[Math.floor(Math.random() * games.length)];
-                
-                state.onlineFriends[friendIndex].game = randomGame;
-                
-                // Shuffle online statuses slightly
-                const statuses = ['online', 'idle', 'dnd'];
-                if (Math.random() < 0.2) {
-                    state.onlineFriends[friendIndex].status = statuses[Math.floor(Math.random() * statuses.length)];
-                }
-
-                // Randomize voice channel people
-                if (Math.random() < 0.15) {
-                    const friendName = state.onlineFriends[friendIndex].name;
-                    if (state.vcUsers.includes(friendName)) {
-                        state.vcUsers = state.vcUsers.filter(u => u !== friendName);
-                    } else {
-                        state.vcUsers.push(friendName);
-                    }
-                }
-                
-                renderDiscordStatus();
-            }
-        }, 12000);
-    }
-
     // --- UTILS ---
     function escapeHtml(text) {
         return text
@@ -766,6 +1064,6 @@ document.addEventListener('DOMContentLoaded', () => {
             .replace(/'/g, "&#039;");
     }
 
-    // Launch application
+    // Start App
     init();
 });
