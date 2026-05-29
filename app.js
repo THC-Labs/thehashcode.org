@@ -190,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function loadLocalAppSubdomains() {
-        const storedApps = localStorage.getItem('thc_apps');
+        const storedApps = localStorage.getItem('thc_apps_v2');
         if (storedApps) {
             state.apps = JSON.parse(storedApps);
         } else {
@@ -199,7 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 { id: 1, name: 'THC Games Hub', url: 'https://games.thehashcode.org', desc: 'Zona de ocio y videojuegos retro del grupo.', icon: 'fa-gamepad', color: 'green' },
                 { id: 2, name: 'Despensia Portal', url: 'https://despensia.thehashcode.org', desc: 'Gestor compartido de despensa e inventario de cocina.', icon: 'fa-cart-shopping', color: 'brown' }
             ];
-            localStorage.setItem('thc_apps', JSON.stringify(state.apps));
+            localStorage.setItem('thc_apps_v2', JSON.stringify(state.apps));
         }
 
         // Load profile settings
@@ -249,7 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function deleteApp(id) {
         state.apps = state.apps.filter(app => app.id !== id);
-        localStorage.setItem('thc_apps', JSON.stringify(state.apps));
+        localStorage.setItem('thc_apps_v2', JSON.stringify(state.apps));
         renderApps();
     }
 
@@ -817,7 +817,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
 
             state.apps.push(newApp);
-            localStorage.setItem('thc_apps', JSON.stringify(state.apps));
+            localStorage.setItem('thc_apps_v2', JSON.stringify(state.apps));
             renderApps();
 
             // Clear inputs
