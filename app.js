@@ -1327,32 +1327,40 @@ document.addEventListener('DOMContentLoaded', () => {
         const savedNick = localStorage.getItem('thc_snap_nick');
         const savedCode = localStorage.getItem('thc_snap_code');
         
-        if (savedNick && savedCode) {
+        if (savedNick && savedCode && (savedCode === '1312' || savedCode === '420')) {
             state.snapNick = savedNick;
-            state.snapCode = savedCode;
+            state.snapCode = 'global';
             
             loginContainer.classList.add('hidden');
             mainContainer.classList.remove('hidden');
             
             document.getElementById('snap-user-display').textContent = state.snapNick;
-            document.getElementById('snap-room-display').textContent = state.snapCode;
+            document.getElementById('snap-room-display').textContent = 'Global';
             
             syncSnapData();
+        } else {
+            localStorage.removeItem('thc_snap_nick');
+            localStorage.removeItem('thc_snap_code');
         }
 
         // Login handler
         if (btnLogin) {
             btnLogin.addEventListener('click', () => {
                 const nick = nickInput.value.trim();
-                const code = codeInput.value.trim().toUpperCase();
+                const code = codeInput.value.trim();
                 
                 if (!nick || !code) {
-                    alert('Por favor, introduce un apodo y código de sala.');
+                    alert('Por favor, introduce tu apodo y el PIN de acceso.');
+                    return;
+                }
+                
+                if (code !== '1312' && code !== '420') {
+                    alert('PIN de acceso incorrecto. Pide el PIN en el canal de Discord o WhatsApp.');
                     return;
                 }
                 
                 state.snapNick = nick;
-                state.snapCode = code;
+                state.snapCode = 'global';
                 
                 localStorage.setItem('thc_snap_nick', nick);
                 localStorage.setItem('thc_snap_code', code);
@@ -1361,7 +1369,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 mainContainer.classList.remove('hidden');
                 
                 document.getElementById('snap-user-display').textContent = nick;
-                document.getElementById('snap-room-display').textContent = code;
+                document.getElementById('snap-room-display').textContent = 'Global';
                 
                 playChimeSound();
                 syncSnapData();

@@ -309,20 +309,20 @@
 
         <!-- VIEW 3: SNAPCHAT VIEW -->
         <main class="dashboard-container tab-view hidden" id="snap-chat-view">
-            <!-- If user is not logged into SnapChat (needs nickname & code) -->
+            <!-- If user is not logged into SnapChat (needs nickname & PIN) -->
             <div class="snap-login-panel glass-panel" id="snap-login-container">
                 <div class="panel-header">
                     <h2><i class="fa-solid fa-ghost text-gold"></i> Entrar a SnapChat THC</h2>
                 </div>
                 <div class="panel-content">
-                    <p class="panel-description">Ingresa tu apodo y código de sala compartida para ver y publicar fotos en tiempo real con tus amigos.</p>
+                    <p class="panel-description">Ingresa tu apodo y el PIN de acceso de la comunidad para ver y publicar fotos en el canal único.</p>
                     <div class="form-group">
                         <label for="snap-nick-input">Tu Apodo / Nickname</label>
                         <input type="text" id="snap-nick-input" placeholder="Ej. GamerX, WeedLover..." maxlength="15">
                     </div>
                     <div class="form-group spacer-top-xs">
-                        <label for="snap-code-input">Código de Sala</label>
-                        <input type="text" id="snap-code-input" placeholder="Ej. THC_GANG_2026, SALAPRO..." maxlength="20">
+                        <label for="snap-code-input">PIN de Acceso</label>
+                        <input type="password" id="snap-code-input" placeholder="Introduce el PIN de la comunidad" maxlength="8">
                     </div>
                     <button class="btn btn-primary w-100 spacer-top" id="btn-snap-login">
                         <i class="fa-solid fa-right-to-bracket"></i> Entrar al Canal de Fotos
@@ -365,7 +365,7 @@
                                 <span class="stat-value text-green" id="snap-user-display">-</span>
                             </div>
                             <div class="stat-row spacer-top-xs">
-                                <span class="stat-name">Sala:</span>
+                                <span class="stat-name">Canal:</span>
                                 <span class="stat-value text-gold" id="snap-room-display">-</span>
                             </div>
                         </div>
