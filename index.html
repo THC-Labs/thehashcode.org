@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>THC Labs | Gaming Hub & Portal</title>
+    <meta name="description" content="Portal central de THC Labs. Acceso a subdominios, pizarra de píxeles colaborativa, chat interno y agenda de eventos para nuestra comunidad.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Premium Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Background animations -->
+    <div class="forest-bg-animation"></div>
+    <div class="scanlines"></div>
+
+    <header class="main-header">
+        <div class="header-logo">
+            <div class="logo-icon-wrapper">
+                <i class="fa-solid fa-leaf logo-leaf"></i>
+            </div>
+            <div class="logo-text">
+                <h1>THC <span class="accent-text">Labs</span></h1>
+                <span class="sublogo-text">thehashcode.org</span>
+            </div>
+        </div>
+
+        <!-- Live Server Status Bar -->
+        <div class="server-status-bar">
+            <div class="status-indicator">
+                <span class="status-dot online"></span>
+                <span class="status-label">SERVER ONLINE</span>
+            </div>
+            <div class="status-time">
+                <i class="fa-regular fa-clock"></i>
+                <span id="digital-clock">00:00:00</span>
+            </div>
+        </div>
+
+        <div class="header-socials">
+            <a href="https://discord.gg/your-invite" target="_blank" class="social-btn discord-btn" title="Entrar a Discord">
+                <i class="fa-brands fa-discord"></i>
+                <span>Discord</span>
+            </a>
+            <a href="https://wa.me/your-number" target="_blank" class="social-btn whatsapp-btn" title="Chat de WhatsApp">
+                <i class="fa-brands fa-whatsapp"></i>
+                <span>WhatsApp</span>
+            </a>
+        </div>
+    </header>
+
+    <main class="dashboard-container">
+        <!-- LEFT COLUMN: Discord status and stats -->
+        <aside class="sidebar-left">
+            <!-- discord status widget -->
+            <div class="glass-panel discord-widget">
+                <div class="panel-header">
+                    <h3><i class="fa-brands fa-discord panel-icon"></i> Discord Activo</h3>
+                    <span class="badge" id="online-counter">3 online</span>
+                </div>
+                <div class="panel-content scrollable">
+                    <ul class="discord-user-list" id="discord-users">
+                        <!-- Will be populated dynamically in app.js -->
+                    </ul>
+                </div>
+                <div class="voice-chat-status">
+                    <div class="vc-header">
+                        <i class="fa-solid fa-volume-high"></i>
+                        <span>Canal de Voz: <strong>General</strong></span>
+                    </div>
+                    <div class="vc-users" id="vc-users-list">
+                        <!-- VC participants -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats/Server widgets -->
+            <div class="glass-panel server-node-widget">
+                <div class="panel-header">
+                    <h3><i class="fa-solid fa-server panel-icon"></i> Servidores</h3>
+                </div>
+                <div class="panel-content">
+                    <div class="stat-row">
+                        <span class="stat-name">Minecraft Server</span>
+                        <span class="stat-value text-green"><i class="fa-solid fa-circle-check"></i> Activo</span>
+                    </div>
+                    <div class="stat-progress-bar">
+                        <div class="progress-fill fill-green" style="width: 85%;"></div>
+                    </div>
+                    <div class="stat-meta">Jugadores: <span id="mc-players">5/20</span></div>
+
+                    <div class="stat-row spacer-top">
+                        <span class="stat-name">Plex Media Server</span>
+                        <span class="stat-value text-green"><i class="fa-solid fa-circle-check"></i> Online</span>
+                    </div>
+                    <div class="stat-progress-bar">
+                        <div class="progress-fill fill-green" style="width: 28%;"></div>
+                    </div>
+                    <div class="stat-meta">Streaming: <span id="plex-streams">1 stream activo</span></div>
+
+                    <div class="stat-row spacer-top">
+                        <span class="stat-name">Factorio Hub</span>
+                        <span class="stat-value text-amber"><i class="fa-solid fa-circle-pause"></i> Inactivo</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- CENTER COLUMN: Subdomains Grid & Pixel Board -->
+        <section class="main-content">
+            <!-- Apps / Subdomains Grid -->
+            <div class="section-title-wrapper">
+                <h2><i class="fa-solid fa-cubes header-icon-green"></i> Nuestras Aplicaciones</h2>
+                <button class="btn btn-secondary btn-sm" id="btn-add-app">
+                    <i class="fa-solid fa-plus"></i> Añadir App
+                </button>
+            </div>
+
+            <div class="apps-grid" id="apps-container">
+                <!-- Apps will be loaded dynamically, template: -->
+            </div>
+
+            <!-- Pixel Board Canvas Section -->
+            <div class="glass-panel pixel-board-panel spacer-top">
+                <div class="panel-header flex-header">
+                    <div class="title-sub">
+                        <h3><i class="fa-solid fa-palette panel-icon"></i> Pizarra de Píxeles Colaborativa</h3>
+                        <p class="panel-description">Dibuja en tiempo real con tus amigos. Se guarda automáticamente.</p>
+                    </div>
+                    <div class="pixel-live-badge animate-pulse">
+                        <span class="live-dot"></span>
+                        <span id="live-users-drawing">2 dibujando</span>
+                    </div>
+                </div>
+                <div class="panel-content pixel-board-layout">
+                    <!-- Tool shelf -->
+                    <div class="pixel-controls">
+                        <div class="tool-section">
+                            <label class="section-label">Colores</label>
+                            <div class="color-palette" id="pixel-colors">
+                                <!-- Populated dynamically with forest/thc theme colors -->
+                            </div>
+                            <div class="custom-color-picker-wrapper">
+                                <i class="fa-solid fa-eye-dropper"></i>
+                                <input type="color" id="custom-color" value="#4ade80" title="Color personalizado">
+                            </div>
+                        </div>
+
+                        <div class="tool-section">
+                            <label class="section-label">Herramientas</label>
+                            <div class="tool-buttons">
+                                <button class="tool-btn active" id="tool-draw" title="Pincel">
+                                    <i class="fa-solid fa-pencil"></i>
+                                </button>
+                                <button class="tool-btn" id="tool-erase" title="Borrador">
+                                    <i class="fa-solid fa-eraser"></i>
+                                </button>
+                                <button class="tool-btn" id="tool-grid-toggle" title="Mostrar/Ocultar Cuadrícula">
+                                    <i class="fa-solid fa-grid-3x3"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="tool-section">
+                            <label class="section-label">Acciones</label>
+                            <button class="btn btn-danger btn-sm w-100" id="btn-clear-canvas">
+                                <i class="fa-solid fa-trash-can"></i> Limpiar
+                            </button>
+                            <button class="btn btn-secondary btn-sm w-100 spacer-top-xs" id="btn-download-canvas">
+                                <i class="fa-solid fa-download"></i> Guardar PNG
+                            </button>
+                            <div class="toggle-container spacer-top-sm">
+                                <label class="switch">
+                                    <input type="checkbox" id="sync-simulator-toggle" checked>
+                                    <span class="slider"></span>
+                                </label>
+                                <span class="toggle-label" title="Simula que otros amigos dibujan de vez en cuando">Simulador Live</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Canvas container -->
+                    <div class="canvas-wrapper">
+                        <canvas id="pixel-canvas" width="512" height="512"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- RIGHT COLUMN: Chat and Events -->
+        <aside class="sidebar-right">
+            <!-- Community Chatboard -->
+            <div class="glass-panel chat-widget">
+                <div class="panel-header">
+                    <h3><i class="fa-regular fa-comments panel-icon"></i> Chat de la Comunidad</h3>
+                    <div class="chat-user-settings">
+                        <button class="btn-icon" id="chat-settings-toggle" title="Cambiar Alias">
+                            <i class="fa-solid fa-user-gear"></i>
+                        </button>
+                    </div>
+                </div>
+                <!-- Chat user configuration modal (inline toggle) -->
+                <div class="chat-config-bar hidden" id="chat-config-bar">
+                    <input type="text" id="chat-username" placeholder="Tu alias..." maxlength="15" value="GamerTHC">
+                    <div class="color-picker-mini" id="chat-color-selector">
+                        <!-- Colors for username -->
+                    </div>
+                    <button class="btn btn-primary btn-xs" id="btn-save-chat-profile">OK</button>
+                </div>
+
+                <div class="panel-content chat-messages scrollable" id="chat-messages-container">
+                    <!-- Dynamic chat messages -->
+                </div>
+                <div class="chat-input-bar">
+                    <input type="text" id="chat-input" placeholder="Escribe un mensaje para el grupo..." autocomplete="off">
+                    <button class="chat-send-btn" id="btn-send-message">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Upcoming Events Calendar -->
+            <div class="glass-panel events-widget spacer-top">
+                <div class="panel-header flex-header">
+                    <h3><i class="fa-regular fa-calendar-days panel-icon"></i> Próximas Partidas / Eventos</h3>
+                    <button class="btn-icon-green" id="btn-add-event" title="Programar Evento">
+                        <i class="fa-solid fa-calendar-plus"></i>
+                    </button>
+                </div>
+                <div class="panel-content scrollable">
+                    <div class="events-list" id="events-container">
+                        <!-- Dynamically populated events -->
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- MODAL FOR ADDING APP SUBDOMAIN -->
+    <div class="modal-backdrop hidden" id="modal-app">
+        <div class="modal-container glass-modal">
+            <div class="modal-header">
+                <h3>Añadir Nueva Aplicación</h3>
+                <button class="modal-close" id="modal-app-close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="app-name">Nombre de la Aplicación</label>
+                    <input type="text" id="app-name" placeholder="Ej. Plex, Stats Tracker...">
+                </div>
+                <div class="form-group">
+                    <label for="app-url">Subdominio / URL</label>
+                    <input type="text" id="app-url" placeholder="Ej. https://plex.thehashcode.org">
+                </div>
+                <div class="form-group">
+                    <label for="app-desc">Descripción Breve</label>
+                    <input type="text" id="app-desc" placeholder="Ej. Servidor de películas y series">
+                </div>
+                <div class="form-group">
+                    <label for="app-icon">Icono de FontAwesome</label>
+                    <select id="app-icon">
+                        <option value="fa-server">Servidor (fa-server)</option>
+                        <option value="fa-gamepad">Mando de Juegos (fa-gamepad)</option>
+                        <option value="fa-film">Películas (fa-film)</option>
+                        <option value="fa-music">Música (fa-music)</option>
+                        <option value="fa-chart-simple">Estadísticas (fa-chart-simple)</option>
+                        <option value="fa-folder-open">Archivos (fa-folder-open)</option>
+                        <option value="fa-shield-halved">Seguridad (fa-shield-halved)</option>
+                        <option value="fa-terminal">Consola (fa-terminal)</option>
+                        <option value="fa-leaf">Hoja THC (fa-leaf)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="app-color">Color Temático</label>
+                    <div class="theme-color-options">
+                        <label class="radio-color-option option-green">
+                            <input type="radio" name="app-color" value="green" checked>
+                            <span>Verde</span>
+                        </label>
+                        <label class="radio-color-option option-brown">
+                            <input type="radio" name="app-color" value="brown">
+                            <span>Marrón</span>
+                        </label>
+                        <label class="radio-color-option option-gold">
+                            <input type="radio" name="app-color" value="gold">
+                            <span>Oro</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btn-cancel-app">Cancelar</button>
+                <button class="btn btn-primary" id="btn-save-app">Añadir</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL FOR ADDING EVENT -->
+    <div class="modal-backdrop hidden" id="modal-event">
+        <div class="modal-container glass-modal">
+            <div class="modal-header">
+                <h3>Programar Evento / Partida</h3>
+                <button class="modal-close" id="modal-event-close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="event-title">Nombre del Evento / Juego</label>
+                    <input type="text" id="event-title" placeholder="Ej. Torneo CS2, Noche de Minecraft...">
+                </div>
+                <div class="form-group">
+                    <label for="event-date">Fecha y Hora</label>
+                    <input type="datetime-local" id="event-date">
+                </div>
+                <div class="form-group">
+                    <label for="event-platform">Plataforma / Canal</label>
+                    <input type="text" id="event-platform" placeholder="Ej. Discord (Sala General), PC, PS5...">
+                </div>
+                <div class="form-group">
+                    <label for="event-desc">Detalles / Reglas</label>
+                    <input type="text" id="event-desc" placeholder="Ej. Traed vuestras propias bebidas. Empezamos puntuales.">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btn-cancel-event">Cancelar</button>
+                <button class="btn btn-primary" id="btn-save-event">Programar</button>
+            </div>
+        </div>
+    </div>
+
+    <footer class="main-footer">
+        <p>&copy; 2026 THC Labs. Creado con <i class="fa-solid fa-heart text-green animate-pulse"></i> por y para los chavales.</p>
+    </footer>
+
+    <!-- Core App Logic -->
+    <script src="app.js"></script>
+</body>
+</html>
