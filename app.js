@@ -254,7 +254,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (state.isSupabaseReal) {
             try {
                 const { data, error } = await supabase
-                    .from('gaming_events')
+                    .from('thc_gaming_events')
                     .select('*');
                 if (error) throw error;
                 state.events = data || [];
@@ -311,7 +311,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (state.isSupabaseReal) {
             try {
                 const { error } = await supabase
-                    .from('gaming_events')
+                    .from('thc_gaming_events')
                     .delete()
                     .eq('id', id);
                 if (error) throw error;
@@ -331,7 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (state.isSupabaseReal) {
             try {
                 const { data, error } = await supabase
-                    .from('chat_messages')
+                    .from('thc_chat_messages')
                     .select('*')
                     .order('created_at', { ascending: false })
                     .limit(40);
@@ -411,7 +411,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (state.isSupabaseReal) {
             try {
                 const { error } = await supabase
-                    .from('chat_messages')
+                    .from('thc_chat_messages')
                     .insert([{
                         username: state.chatProfile.username,
                         color: state.chatProfile.color,
@@ -449,7 +449,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (state.isSupabaseReal) {
             try {
                 const { data, error } = await supabase
-                    .from('pixel_board')
+                    .from('thc_pixel_board')
                     .select('*')
                     .eq('id', 1)
                     .single();
@@ -465,7 +465,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (!data) {
                     // Create board if missing in cloud
                     const emptyGrid = new Array(32 * 32).fill('#000000');
-                    await supabase.from('pixel_board').insert({ id: 1, pixels: emptyGrid });
+                    await supabase.from('thc_pixel_board').insert({ id: 1, pixels: emptyGrid });
                     state.canvasPixels = emptyGrid;
                     drawPixelBoard();
                     drawPixelPreview();
@@ -627,7 +627,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (state.isSupabaseReal) {
                 try {
                     const { error } = await supabase
-                        .from('pixel_board')
+                        .from('thc_pixel_board')
                         .upsert({ id: 1, pixels: state.canvasPixels });
                     if (error) throw error;
                 } catch (err) {
@@ -900,7 +900,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (state.isSupabaseReal) {
                 try {
                     const { error } = await supabase
-                        .from('gaming_events')
+                        .from('thc_gaming_events')
                         .insert([{
                             title: title,
                             event_date: date,
