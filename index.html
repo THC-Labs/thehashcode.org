@@ -48,6 +48,9 @@
             <button class="tab-btn" data-tab="trivia-view">
                 <i class="fa-solid fa-circle-question"></i> <span>Trivia THC</span>
             </button>
+            <button class="tab-btn" data-tab="email-request-view">
+                <i class="fa-solid fa-envelope"></i> <span>Correo</span>
+            </button>
         </nav>
 
         <div class="server-status-bar">
@@ -652,6 +655,48 @@
                         </div>
                         <button class="btn btn-success w-100 spacer-top" id="btn-submit-question">
                             <i class="fa-solid fa-plus"></i> Guardar Pregunta
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- VIEW 5: EMAIL REQUEST VIEW -->
+        <main class="dashboard-container tab-view hidden" id="email-request-view">
+            <section class="main-content" style="max-width: 600px; margin: 1.5rem auto; float: none;">
+                <div class="glass-panel email-request-card" style="padding: 2rem;">
+                    <div class="panel-header" style="text-align: center; display: block; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 1rem; margin-bottom: 1.5rem;">
+                        <h2 style="font-family: var(--font-heading); font-size: 1.6rem; color: var(--green-neon); display: flex; align-items: center; justify-content: center; gap: 0.6rem; margin: 0;">
+                            <i class="fa-solid fa-envelope-open-text"></i> Solicitar Alias @thehashcode.org
+                        </h2>
+                        <p class="panel-description" style="margin-top: 0.5rem; color: var(--text-muted); font-size: 0.82rem;">Crea una redirección personalizada de correo electrónico apuntando a tu bandeja de entrada personal.</p>
+                    </div>
+
+                    <div class="panel-content">
+                        <!-- Warning Alert (Important Notice) -->
+                        <div class="email-notice-box" style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); color: #f59e0b; padding: 1rem; border-radius: 8px; font-size: 0.78rem; line-height: 1.45; margin-bottom: 1.5rem; display: flex; gap: 0.6rem; align-items: flex-start;">
+                            <i class="fa-solid fa-triangle-exclamation" style="font-size: 1rem; margin-top: 0.1rem; flex-shrink: 0;"></i>
+                            <div>
+                                <strong>Nota importante:</strong> Una vez configurado tu nuevo alias, es muy probable que tengas que activar tu dirección de correo electrónico mediante un enlace de verificación automático que recibirás en tu correo de destino.
+                            </div>
+                        </div>
+
+                        <!-- Form -->
+                        <div class="form-group">
+                            <label for="email-alias-input">Alias de correo deseado</label>
+                            <div class="input-suffix-wrapper" style="display: flex; align-items: center; background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 6px; overflow: hidden; padding-right: 0.8rem; transition: var(--transition-smooth);">
+                                <input type="text" id="email-alias-input" placeholder="Ej. tu-nombre, apodo, contacto" style="flex-grow: 1; border: none; background: transparent; padding: 0.6rem 0.8rem; color: #fff; outline: none; font-size: 0.85rem;" maxlength="20">
+                                <span class="input-suffix" style="font-family: var(--font-heading); font-size: 0.82rem; font-weight: 600; color: var(--green-neon); pointer-events: none; user-select: none;">@thehashcode.org</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group spacer-top-xs">
+                            <label for="email-forward-input">Correo al que querrás direccionar</label>
+                            <input type="email" id="email-forward-input" placeholder="Ej. tu-correo@gmail.com, hotmail, etc.">
+                        </div>
+
+                        <button class="btn btn-primary w-100 spacer-top" id="btn-submit-email-request" style="padding: 0.8rem 1.2rem; font-weight: 600; letter-spacing: 0.5px;">
+                            <i class="fa-solid fa-paper-plane"></i> Enviar Solicitud y Notificar 🔥
                         </button>
                     </div>
                 </div>

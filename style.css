@@ -2907,5 +2907,26 @@ input:checked + .slider:before {
     width: 100%;
 }
 
+/* ==========================================
+   EMAIL REQUEST TAB STYLING
+   ========================================== */
+.email-request-card {
+    border-color: var(--glass-border-green) !important;
+}
+
+.input-suffix-wrapper:focus-within {
+    border-color: var(--green-primary) !important;
+    box-shadow: 0 0 10px rgba(112, 224, 0, 0.15);
+}
+
+.email-notice-box {
+    animation: fadeInScale 0.3s ease;
+}
+
+@keyframes fadeInScale {
+    from { transform: scale(0.98); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
 
 

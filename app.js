@@ -176,9 +176,10 @@ document.addEventListener('DOMContentLoaded', () => {
         initMusicPlayer();
         initParticleSystem();
 
-        // Initialise Snapchat & Trivia engines
+        // Initialise Snapchat, Trivia & Email Request engines
         initSnapChat();
         initTrivia();
+        initEmailRequest();
 
         // Start Sync / Polling Loops (CORS discord & Supabase)
         setInterval(fetchChatMessages, 4000);   // Chat polls every 4s
@@ -2638,6 +2639,105 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="player-score">${rec.score} pts</span>
             `;
             container.appendChild(item);
+        });
+    }
+
+    // ==========================================
+    // EMAIL ALIAS REQUESTS ENGINE
+    // ==========================================
+    function initEmailRequest() {
+        const btnSubmit = document.getElementById('btn-submit-email-request');
+        const aliasInput = document.getElementById('email-alias-input');
+        const forwardInput = document.getElementById('email-forward-input');
+
+        if (!btnSubmit) return;
+
+        btnSubmit.addEventListener('click', async () => {
+            const alias = aliasInput.value.trim().toLowerCase();
+            const forward = forwardInput.value.trim().toLowerCase();
+
+            // Validation
+            if (!alias) {
+                alert('Por favor, ingresa el alias que deseas.');
+                return;
+            }
+            if (!forward) {
+                alert('Por favor, ingresa la dirección de correo personal a direccionar.');
+                return;
+            }
+
+            // Clean alias (remove @thehashcode.org if they manually wrote it)
+            const cleanAlias = alias.replace('@thehashcode.org', '').trim();
+            const aliasRegex = /^[a-z0-9._-]+$/;
+            if (!aliasRegex.test(cleanAlias)) {
+                alert('El alias solicitado solo puede contener letras, números, puntos, guiones y guiones bajos (sin arrobas, espacios ni otros caracteres especiales).');
+                return;
+            }
+
+            // Validate destination email format
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(forward)) {
+                alert('Por favor, ingresa un correo de destino válido.');
+                return;
+            }
+
+            btnSubmit.disabled = true;
+            btnSubmit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando...';
+
+            const record = {
+                requested_alias: cleanAlias,
+                forward_to: forward,
+                status: 'pendiente'
+            };
+
+            if (state.isSupabaseReal) {
+                try {
+                    const { error } = await supabase
+                        .from('thc_email_requests')
+                        .insert([record]);
+                    if (error) throw error;
+                } catch (err) {
+                    console.error('Failed to save email request to Supabase:', err);
+                    alert('Error de conexión al registrar en Supabase. Se enviará únicamente por correo.');
+                }
+            } else {
+                // Local fallback
+                const local = JSON.parse(localStorage.getItem('thc_email_requests_local') || '[]');
+                local.push({ id: Date.now(), created_at: new Date().toISOString(), ...record });
+                localStorage.setItem('thc_email_requests_local', JSON.stringify(local));
+            }
+
+            playChimeSound();
+
+            // Prepare mailto composition
+            const adminEmail = 'didac@thehashcode.org';
+            const subject = encodeURIComponent('[THC Labs] Solicitud de Alias de Correo @thehashcode.org');
+            const body = encodeURIComponent(
+                `Hola Dídac,\n\n` +
+                `Quiero solicitar la creación de un alias de correo electrónico redireccionado:\n` +
+                `Alias solicitado: ${cleanAlias}@thehashcode.org\n` +
+                `Redireccionar a mi correo personal: ${forward}\n\n` +
+                `Quedo a la espera de la confirmación y el correo automático de verificación para activarlo.\n\n` +
+                `¡Muchas gracias!`
+            );
+
+            // Open mail client
+            window.location.href = `mailto:${adminEmail}?subject=${subject}&body=${body}`;
+
+            // Success Alert popup
+            setTimeout(() => {
+                alert(
+                    `¡Solicitud registrada!\n\n` +
+                    `Se ha guardado tu solicitud para crear el alias "${cleanAlias}@thehashcode.org" apuntando a "${forward}".\n\n` +
+                    `IMPORTANTE: Recuerda que es muy probable que tengas que activar tu dirección una vez configurado el alias mediante un enlace de verificación automático que recibirás en tu buzón de correo.`
+                );
+                
+                // Clear fields
+                aliasInput.value = '';
+                forwardInput.value = '';
+                btnSubmit.disabled = false;
+                btnSubmit.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Enviar Solicitud y Notificar 🔥';
+            }, 1000);
         });
     }
 
