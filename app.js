@@ -18,10 +18,14 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedPixelColor: '#70e000',
         activeTool: 'draw', 
         showPixelGrid: true,
-        canvasPixels: [], // 32x32 color grid (1024 strings)
+        canvasPixels: [], // 64x64 color grid (4096 strings)
         discordGuildId: '',
         isDiscordReal: false,
-        isSupabaseReal: false
+        isSupabaseReal: false,
+        previewOffset: {
+            left: -Math.floor(Math.random() * (512 - 220)),
+            top: -Math.floor(Math.random() * (512 - 220))
+        }
     };
 
     // --- SUPABASE CLIENT INITIALIZATION ---
@@ -441,7 +445,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- DYNAMIC SUPABASE SYNC: PIXEL BOARD ---
-    const logicalGridSize = 32;
+    const logicalGridSize = 64;
     let isDrawing = false;
     let saveTimeout = null;
 
@@ -456,16 +460,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 if (error && error.code !== 'PGRST116') throw error; // ignore row-not-found errors
 
-                if (data && Array.isArray(data.pixels) && data.pixels.length === 1024) {
+                if (data && Array.isArray(data.pixels) && data.pixels.length === 4096) {
                     if (JSON.stringify(data.pixels) !== JSON.stringify(state.canvasPixels)) {
                         state.canvasPixels = data.pixels;
                         drawPixelBoard();
                         drawPixelPreview();
                     }
-                } else if (!data) {
-                    // Create board if missing in cloud
-                    const emptyGrid = new Array(32 * 32).fill('#000000');
-                    await supabase.from('thc_pixel_board').insert({ id: 1, pixels: emptyGrid });
+                } else if (!data || data.pixels.length !== 4096) {
+                    // Create/reset board if missing or outdated in cloud
+                    const emptyGrid = new Array(64 * 64).fill('#000000');
+                    await supabase.from('thc_pixel_board').upsert({ id: 1, pixels: emptyGrid });
                     state.canvasPixels = emptyGrid;
                     drawPixelBoard();
                     drawPixelPreview();
@@ -478,13 +482,20 @@ document.addEventListener('DOMContentLoaded', () => {
             const localCanvas = localStorage.getItem('thc_pixel_canvas');
             if (localCanvas) {
                 const parsed = JSON.parse(localCanvas);
-                if (JSON.stringify(parsed) !== JSON.stringify(state.canvasPixels)) {
-                    state.canvasPixels = parsed;
+                if (parsed.length === 4096) {
+                    if (JSON.stringify(parsed) !== JSON.stringify(state.canvasPixels)) {
+                        state.canvasPixels = parsed;
+                        drawPixelBoard();
+                        drawPixelPreview();
+                    }
+                } else {
+                    state.canvasPixels = new Array(64 * 64).fill('#000000');
+                    localStorage.setItem('thc_pixel_canvas', JSON.stringify(state.canvasPixels));
                     drawPixelBoard();
                     drawPixelPreview();
                 }
             } else {
-                state.canvasPixels = new Array(32 * 32).fill('#000000');
+                state.canvasPixels = new Array(64 * 64).fill('#000000');
                 localStorage.setItem('thc_pixel_canvas', JSON.stringify(state.canvasPixels));
                 drawPixelBoard();
                 drawPixelPreview();
@@ -566,9 +577,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Render cropped/masked preview canvas on dashboard
     function drawPixelPreview() {
         if (!pixelCanvasPreview) return;
+
+        // Position the canvas inside the window container using our saved random offset
+        pixelCanvasPreview.style.left = `${state.previewOffset.left}px`;
+        pixelCanvasPreview.style.top = `${state.previewOffset.top}px`;
+
         const width = pixelCanvasPreview.width;
         const height = pixelCanvasPreview.height;
-        const cellSize = width / logicalGridSize; // 256 / 32 = 8px
+        const cellSize = width / logicalGridSize; // 512 / 64 = 8px
 
         ctxPreview.fillStyle = '#020402';
         ctxPreview.fillRect(0, 0, width, height);
@@ -954,7 +970,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         btnClearCanvas.addEventListener('click', () => {
             if (confirm('¿Seguro que quieres limpiar todo el mural de píxeles?')) {
-                state.canvasPixels = new Array(32 * 32).fill('#000000');
+                state.canvasPixels = new Array(64 * 64).fill('#000000');
                 localStorage.setItem('thc_pixel_canvas', JSON.stringify(state.canvasPixels));
                 drawPixelBoard();
                 drawPixelPreview();

@@ -1449,39 +1449,47 @@ input:checked + .slider:before {
 
 .preview-mask-wrapper {
     position: relative;
-    width: 140px;
-    height: 140px;
+    width: 220px;
+    height: 220px;
     flex-shrink: 0;
+    border: 3px solid var(--brown-primary);
+    border-radius: 8px;
+    box-shadow: 0 0 15px var(--brown-glow), inset 0 0 20px rgba(0,0,0,0.9);
+    overflow: hidden;
 }
 
-.preview-mask-container {
+.preview-mask-window {
     width: 100%;
     height: 100%;
-    border-radius: 50%;
+    position: relative;
     overflow: hidden;
-    border: 2px solid var(--green-primary);
-    box-shadow: 0 0 15px var(--green-glow), inset 0 0 20px rgba(0,0,0,0.9);
     background-color: #020402;
 }
 
 #pixel-canvas-preview {
-    width: 100%;
-    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 512px !important;
+    height: 512px !important;
+    max-width: none !important;
+    max-height: none !important;
     image-rendering: pixelated;
     display: block;
-    transform: scale(1.1); /* Slight zoom for abstract organic cropping */
+    pointer-events: none;
+    transition: top 0.6s cubic-bezier(0.25, 0.8, 0.25, 1), left 0.6s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 .glow-ring {
     position: absolute;
-    top: -4px;
-    left: -4px;
-    right: -4px;
-    bottom: -4px;
-    border-radius: 50%;
-    border: 1px dashed var(--green-neon);
+    top: -5px;
+    left: -5px;
+    right: -5px;
+    bottom: -5px;
+    border-radius: 8px;
+    border: 1px dashed var(--gold-primary);
     opacity: 0.35;
-    animation: rotateGlowRing 20s linear infinite;
+    animation: rotateGlowRing 25s linear infinite;
     pointer-events: none;
 }
 
