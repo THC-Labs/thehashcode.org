@@ -22,16 +22,16 @@ create table if not exists thc_gaming_events (
     description text
 );
 
--- 3. Pixel Board Table (Holds 32x32 color grid)
+-- 3. Pixel Board Table (Holds 64x64 color grid with text key)
 create table if not exists thc_pixel_board (
-    id bigint primary key,
+    board_id text primary key,
     pixels jsonb not null
 );
 
--- Initialize the Pixel Board with empty grid (1024 black pixels) if not exists
-insert into thc_pixel_board (id, pixels)
-values (1, '[]')
-on conflict (id) do nothing;
+-- Initialize the Pixel Board with empty grid ('[]') for 'global' if not exists
+insert into thc_pixel_board (board_id, pixels)
+values ('global', '[]')
+on conflict (board_id) do nothing;
 
 -- 4. Enable Row Level Security (RLS) on all tables
 alter table thc_chat_messages enable row level security;

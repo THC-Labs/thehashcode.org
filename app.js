@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
         activeTool: 'draw', 
         showPixelGrid: true,
         canvasPixels: [], // 64x64 color grid (4096 strings)
+        activeBoardId: 'global',
         discordGuildId: '',
         isDiscordReal: false,
         isSupabaseReal: false,
@@ -112,6 +113,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnClearCanvas = document.getElementById('btn-clear-canvas');
     const btnDownloadCanvas = document.getElementById('btn-download-canvas');
     const liveDbSyncStatus = document.getElementById('live-db-sync-status');
+    const btnBoardGlobal = document.getElementById('btn-board-global');
+    const btnBoardPersonal = document.getElementById('btn-board-personal');
+    const btnBoardShared = document.getElementById('btn-board-shared');
+    const boardCodeGroup = document.getElementById('board-code-group');
+    const boardCodeInput = document.getElementById('board-code-input');
 
     // Chat Elements
     const chatMessagesContainer = document.getElementById('chat-messages-container');
@@ -541,7 +547,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const { data, error } = await supabase
                     .from('thc_pixel_board')
                     .select('*')
-                    .eq('id', 1)
+                    .eq('board_id', state.activeBoardId)
                     .single();
                 
                 if (error && error.code !== 'PGRST116') throw error; // ignore row-not-found errors
@@ -555,7 +561,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (!data || data.pixels.length !== 4096) {
                     // Create/reset board if missing or outdated in cloud
                     const emptyGrid = new Array(64 * 64).fill('#000000');
-                    await supabase.from('thc_pixel_board').upsert({ id: 1, pixels: emptyGrid });
+                    await supabase.from('thc_pixel_board').upsert({ board_id: state.activeBoardId, pixels: emptyGrid });
                     state.canvasPixels = emptyGrid;
                     drawPixelBoard();
                     drawPixelPreview();
@@ -564,8 +570,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error('Supabase fetch pixel board failed:', err);
             }
         } else {
-            // Local fallback
-            const localCanvas = localStorage.getItem('thc_pixel_canvas');
+            // Local fallback partitioned by board ID
+            const localCanvas = localStorage.getItem('thc_pixel_canvas_' + state.activeBoardId);
             if (localCanvas) {
                 const parsed = JSON.parse(localCanvas);
                 if (parsed.length === 4096) {
@@ -576,13 +582,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 } else {
                     state.canvasPixels = new Array(64 * 64).fill('#000000');
-                    localStorage.setItem('thc_pixel_canvas', JSON.stringify(state.canvasPixels));
+                    localStorage.setItem('thc_pixel_canvas_' + state.activeBoardId, JSON.stringify(state.canvasPixels));
                     drawPixelBoard();
                     drawPixelPreview();
                 }
             } else {
                 state.canvasPixels = new Array(64 * 64).fill('#000000');
-                localStorage.setItem('thc_pixel_canvas', JSON.stringify(state.canvasPixels));
+                localStorage.setItem('thc_pixel_canvas_' + state.activeBoardId, JSON.stringify(state.canvasPixels));
                 drawPixelBoard();
                 drawPixelPreview();
             }
@@ -733,11 +739,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     const { error } = await supabase
                         .from('thc_pixel_board')
-                        .upsert({ id: 1, pixels: state.canvasPixels });
+                        .upsert({ board_id: state.activeBoardId, pixels: state.canvasPixels });
                     if (error) throw error;
                 } catch (err) {
                     console.error('Supabase pixel board save failed:', err);
                 }
+            } else {
+                localStorage.setItem('thc_pixel_canvas_' + state.activeBoardId, JSON.stringify(state.canvasPixels));
             }
             if (liveDbSyncStatus) {
                 liveDbSyncStatus.textContent = 'Sincronizado';
@@ -877,6 +885,74 @@ document.addEventListener('DOMContentLoaded', () => {
         btnBackToDashboard.addEventListener('click', () => {
             switchTab('dashboard-view');
         });
+
+        // Pizarra active board mode selectors
+        if (btnBoardGlobal && btnBoardPersonal && btnBoardShared) {
+            const updateBoardModeUI = (activeBtn) => {
+                [btnBoardGlobal, btnBoardPersonal, btnBoardShared].forEach(btn => {
+                    if (btn === activeBtn) {
+                        btn.classList.add('btn-primary');
+                        btn.classList.remove('btn-secondary');
+                        btn.style.fontWeight = '600';
+                    } else {
+                        btn.classList.add('btn-secondary');
+                        btn.classList.remove('btn-primary');
+                        btn.style.fontWeight = '500';
+                    }
+                });
+            };
+
+            btnBoardGlobal.addEventListener('click', () => {
+                updateBoardModeUI(btnBoardGlobal);
+                boardCodeGroup.classList.add('hidden');
+                state.activeBoardId = 'global';
+                playChimeSound();
+                fetchPixelBoard();
+            });
+
+            btnBoardPersonal.addEventListener('click', () => {
+                let nickname = state.chatProfile.username || state.snapNick || localStorage.getItem('thc_snap_nick');
+                if (!nickname || nickname === 'GamerTHC') {
+                    const promptName = prompt('Introduce tu apodo para tu pizarra personal:');
+                    if (promptName && promptName.trim()) {
+                        nickname = promptName.trim().toLowerCase();
+                        state.chatProfile.username = nickname;
+                        localStorage.setItem('thc_chat_profile', JSON.stringify(state.chatProfile));
+                    } else {
+                        return; // User cancelled
+                    }
+                }
+                
+                updateBoardModeUI(btnBoardPersonal);
+                boardCodeGroup.classList.add('hidden');
+                state.activeBoardId = 'user_' + nickname.toLowerCase();
+                playChimeSound();
+                fetchPixelBoard();
+            });
+
+            btnBoardShared.addEventListener('click', () => {
+                updateBoardModeUI(btnBoardShared);
+                boardCodeGroup.classList.remove('hidden');
+                boardCodeInput.focus();
+                
+                const code = boardCodeInput.value.trim().toLowerCase();
+                if (code) {
+                    state.activeBoardId = 'room_' + code;
+                } else {
+                    state.activeBoardId = 'global';
+                }
+                playChimeSound();
+                fetchPixelBoard();
+            });
+
+            boardCodeInput.addEventListener('input', () => {
+                const code = boardCodeInput.value.trim().toLowerCase();
+                if (code) {
+                    state.activeBoardId = 'room_' + code;
+                    fetchPixelBoard();
+                }
+            });
+        }
 
         // App Modal triggers
         btnAddApp.addEventListener('click', () => modalApp.classList.remove('hidden'));
