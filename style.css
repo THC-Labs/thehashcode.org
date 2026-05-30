@@ -734,7 +734,7 @@ body::after {
 
 .pixel-board-layout {
     display: grid;
-    grid-template-columns: 200px 1fr;
+    grid-template-columns: 240px 1fr;
     gap: 1.5rem;
     align-items: start;
 }
@@ -1522,7 +1522,7 @@ input:checked + .slider:before {
 .full-pixel-layout {
     grid-column: span 3;
     padding: 1.5rem;
-    max-width: 960px;
+    max-width: 1500px;
     width: 100%;
     margin: 0 auto;
 }
@@ -1537,7 +1537,7 @@ input:checked + .slider:before {
     position: relative;
     aspect-ratio: 1;
     overflow: hidden;
-    max-width: 480px;
+    max-width: 78vh;
     width: 100%;
     margin: 0 auto;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7), inset 0 0 20px rgba(0, 0, 0, 0.95);
