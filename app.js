@@ -232,11 +232,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const storedApps = localStorage.getItem('thc_apps_v2');
         if (storedApps) {
             state.apps = JSON.parse(storedApps);
+            // Migrate to add default apps if missing (ensures existing localstorage users get new defaults)
+            const hasTorneos = state.apps.some(app => app.url.includes('torneos.thehashcode.org'));
+            if (!hasTorneos) {
+                state.apps.push({
+                    id: 3,
+                    name: 'Torneos THC',
+                    url: 'https://torneos.thehashcode.org',
+                    desc: 'Plataforma de organización y seguimiento de competiciones del grupo.',
+                    icon: 'fa-trophy',
+                    color: 'gold'
+                });
+                localStorage.setItem('thc_apps_v2', JSON.stringify(state.apps));
+            }
         } else {
             // Default real apps
             state.apps = [
                 { id: 1, name: 'THC Games Hub', url: 'https://games.thehashcode.org', desc: 'Zona de ocio y videojuegos retro del grupo.', icon: 'fa-gamepad', color: 'green' },
-                { id: 2, name: 'Despensia Portal', url: 'https://despensia.thehashcode.org', desc: 'Gestor compartido de despensa e inventario de cocina.', icon: 'fa-cart-shopping', color: 'brown' }
+                { id: 2, name: 'Despensia Portal', url: 'https://despensia.thehashcode.org', desc: 'Gestor compartido de despensa e inventario de cocina.', icon: 'fa-cart-shopping', color: 'brown' },
+                { id: 3, name: 'Torneos THC', url: 'https://torneos.thehashcode.org', desc: 'Plataforma de organización y seguimiento de competiciones del grupo.', icon: 'fa-trophy', color: 'gold' }
             ];
             localStorage.setItem('thc_apps_v2', JSON.stringify(state.apps));
         }
@@ -261,7 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
             card.addEventListener('mouseenter', playHoverSound);
             
             // Allow deletion only for custom added apps
-            const isDefault = app.url.includes('games.thehashcode.org') || app.url.includes('despensia.thehashcode.org');
+            const isDefault = app.url.includes('games.thehashcode.org') || app.url.includes('despensia.thehashcode.org') || app.url.includes('torneos.thehashcode.org');
             const deleteBtnHtml = !isDefault ? `<button class="app-delete-btn" data-id="${app.id}"><i class="fa-solid fa-trash-can"></i></button>` : '';
 
             card.innerHTML = `
